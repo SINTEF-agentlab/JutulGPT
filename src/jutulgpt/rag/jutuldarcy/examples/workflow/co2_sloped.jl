@@ -1,4 +1,5 @@
 # # CO2 injection in saline aquifer with storage inventory
+# <tags: CO2, Wells, Advanced, StartToFinish>
 # This example demonstrates a custom K-value compositional model for the
 # injection of CO2 into a saline aquifer. The physical model for flow of CO2 is
 # a realization of the description in [11th SPE Comparative Solutions
@@ -114,7 +115,6 @@ else
 end
 model = setup_reservoir_model(domain, :co2brine,
     wells = Injector,
-    extra_out = false,
     salt_names = ["NaCl", "KCl", "CaSO4", "CaCl2", "MgSO4", "MgCl2"],
     salt_mole_fractions = [0.01, 0.005, 0.005, 0.001, 0.0002, 1e-5],
     co2_physics = physics

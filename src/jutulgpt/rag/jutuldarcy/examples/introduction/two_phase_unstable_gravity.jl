@@ -1,4 +1,5 @@
 # # Gravity circulation with CPR preconditioner
+# <tags: Immiscible, Introduction>
 # This example demonstrates a more complex gravity driven instability. The
 # problem is a bit larger than the [Gravity segregation example](@ref), and is
 # therefore set up using the high level API that automatically sets up an
@@ -26,7 +27,8 @@ rhoVS = 500.0*kg/meter^3
 cl, cv = 1e-5/bar, 1e-4/bar
 L, V = LiquidPhase(), VaporPhase()
 sys = ImmiscibleSystem([L, V])
-model, parameters = setup_reservoir_model(domain, sys)
+model = setup_reservoir_model(domain, sys)
+parameters = setup_parameters(model)
 density = ConstantCompressibilityDensities(sys, p0, [rhoLS, rhoVS], [cl, cv]) # Replace density with a lighter pair
 replace_variables!(model, PhaseMassDensities = density);
 kr = BrooksCoreyRelativePermeabilities(sys, [2.0, 3.0])

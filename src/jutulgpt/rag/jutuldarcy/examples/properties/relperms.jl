@@ -1,4 +1,5 @@
 # # Relative Permeabilities in JutulDarcy
+# <tags: Introduction, Properties>
 # We will show a few of the functions for evaluating relative permeabilities,
 # show how these can be fitted to data and finally how they can be used in
 # simulation.
@@ -18,7 +19,7 @@ function setup_model_with_relperm(kr; mu_ratio = 1.0)
     domain = reservoir_domain(mesh)
     nc = number_of_cells(domain)
     sys = ImmiscibleSystem((LiquidPhase(), VaporPhase()), reference_densities = [1000.0, 700.0])
-    model,  = setup_reservoir_model(domain, sys)
+    model = setup_reservoir_model(domain, sys)
     rmodel = reservoir_model(model)
     replace_variables!(rmodel, RelativePermeabilities = kr)
     JutulDarcy.add_relperm_parameters!(rmodel)

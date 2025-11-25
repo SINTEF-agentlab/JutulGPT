@@ -1,4 +1,5 @@
 # # Polymer injection in a 2D black-oil reservoir model
+# <tags: Blackoil, Tracers, Validation, InputFile>
 # This example validates a small polymer model taken from the OPM-tests
 # repository. The model is a 2D black-oil reservoir model with polymer
 # injection. Adding polymer to the water phase increases the viscosity of the
@@ -13,8 +14,8 @@
 # - Permeability reduction from polymer
 # - Dead pore space for polymer part of water phase
 #
-# Note that non-Newtonian / shear effectsare not yet implemented in the polymer
-# model.
+# Note that non-Newtonian rheology / shear effects are not yet implemented in
+# the polymer model.
 
 using GeoEnergyIO, Jutul, JutulDarcy, GLMakie, DelimitedFiles
 pth = JutulDarcy.GeoEnergyIO.test_input_file_path("BOPOLYMER_NOSHEAR", "BOPOLYMER_NOSHEAR.DATA")
