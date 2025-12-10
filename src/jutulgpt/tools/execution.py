@@ -50,10 +50,10 @@ class RunJuliaLinterInput(BaseModel):
     description="Run a static analysis of Julia code using a linter. Returns output or error message.",
 )
 def run_julia_linter(code: str):
-    out, code_failed = _run_linter(code)
-    if not code_failed:
+    out, issues_found = _run_linter(code)
+    if issues_found:
         return out
-    return "Linter found no issues!"
+    return "Linter found no issues."
 
 
 @tool("execute_terminal_command", parse_docstring=True)
