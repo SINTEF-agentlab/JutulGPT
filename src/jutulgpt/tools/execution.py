@@ -13,6 +13,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from jutulgpt.cli import colorscheme, print_to_console
+from jutulgpt.logging import ToolEntry, get_session_logger
 from jutulgpt.nodes.check_code import _run_julia_code, _run_linter
 from jutulgpt.utils import fix_imports, shorter_simulations
 
@@ -103,6 +104,19 @@ def execute_terminal_command(command: str) -> str:
             else colorscheme.message,
         )
 
+        # Log to session file if logger available
+        logger = get_session_logger()
+        if logger:
+            logger.log(
+                ToolEntry(
+                    content=output,
+                    title="Run finished",
+                    tool_name="execute_terminal_command",
+                    args={"command": command, "cwd": working_directory},
+                    returncode=result.returncode,
+                )
+            )
+
         return (
             output.strip()
             if output.strip()
@@ -110,20 +124,44 @@ def execute_terminal_command(command: str) -> str:
         )
 
     except subprocess.TimeoutExpired:
+        error_msg = "ERROR: Command execution timed out after 60 seconds."
         print_to_console(
-            text="ERROR: Command execution timed out after 60 seconds.",
+            text=error_msg,
             title="Run error",
-            border_style=colorscheme.success,
+            border_style=colorscheme.error,
         )
+        logger = get_session_logger()
+        if logger:
+            logger.log(
+                ToolEntry(
+                    content=error_msg,
+                    title="Run error",
+                    tool_name="execute_terminal_command",
+                    args={"command": command, "cwd": working_directory},
+                    error="timeout",
+                )
+            )
+        return error_msg
 
-        return "ERROR: Command execution timed out after 60 seconds."
     except Exception as e:
+        error_msg = f"ERROR: Failed to execute command: {str(e)}"
         print_to_console(
-            text=f"ERROR: Failed to execute command: {str(e)}",
+            text=error_msg,
             title="Run error",
-            border_style=colorscheme.success,
+            border_style=colorscheme.error,
         )
-        return f"ERROR: Failed to execute command: {str(e)}"
+        logger = get_session_logger()
+        if logger:
+            logger.log(
+                ToolEntry(
+                    content=error_msg,
+                    title="Run error",
+                    tool_name="execute_terminal_command",
+                    args={"command": command, "cwd": working_directory},
+                    error=str(e),
+                )
+            )
+        return error_msg
 
 
 @tool

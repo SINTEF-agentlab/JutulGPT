@@ -33,6 +33,9 @@ EMBEDDING_MODEL_NAME = (
 RECURSION_LIMIT = 200  # Number of recursions before an error is thrown.
 LLM_TEMPERATURE = 0
 
+# Display settings - used for both console output and log files
+DISPLAY_CONTENT_MAX_LENGTH = 800  # Max characters to display for tool outputs
+
 
 # Setup of the environment and some logging. Not neccessary to touch this.
 def _set_env(var: str):
@@ -165,6 +168,30 @@ class BaseConfiguration:
         default=prompts.AUTONOMOUS_AGENT_PROMPT,
         metadata={
             "description": "The default prompt used for the fully autonomous agent."
+        },
+    )
+
+    # Logging
+    log_to_file: bool = field(
+        default=True,
+        metadata={
+            "description": "Enable writing assistant I/O to a session Markdown log."
+        },
+    )
+    log_dir: str = field(
+        default="output/logs",
+        metadata={
+            "description": "Directory where session logs are stored (auto-created)."
+        },
+    )
+    log_filename_prefix: str = field(
+        default="agent_output",
+        metadata={"description": "Prefix for per-session log filenames."},
+    )
+    log_version_info: bool = field(
+        default=True,
+        metadata={
+            "description": "Include Julia/Jutul/JutulDarcy versions in log header."
         },
     )
 

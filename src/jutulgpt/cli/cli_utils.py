@@ -1,4 +1,11 @@
-from typing import List, Optional
+"""CLI utilities for console output and user interaction.
+
+This module provides Rich console rendering utilities for the JutulGPT CLI.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, List, Optional
 
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
@@ -13,29 +20,42 @@ from rich.text import Text
 from jutulgpt.globals import console
 from jutulgpt.state import CodeBlock
 
+if TYPE_CHECKING:
+    from jutulgpt.logging import SessionLogger
+
 
 def print_to_console(
     text: str,
     title: str = "Assistant",
     border_style: str = "",
-    panel_kwargs: dict = {},
+    panel_kwargs: Optional[dict] = None,
     with_markdown: bool = True,
+    logger: Optional["SessionLogger"] = None,
+    log_entry: Optional[object] = None,
 ):
-    """
-    Print text to the console with a panel.
+    """Print text to the console with a Rich panel.
 
     Args:
-        console (Console): The console to print to.
-        text (str): The text to print.
-        title (str): The title of the panel.
-        panel_kwargs (dict): Additional keyword arguments for the panel.
+        text: The text to print.
+        title: The title of the panel.
+        border_style: Style for panel border.
+        panel_kwargs: Additional keyword arguments for the panel.
+        with_markdown: Whether to render text as markdown.
+        logger: Optional SessionLogger instance for file logging.
+        log_entry: Optional LogEntry to write to the logger.
     """
-    if border_style != "":
+    panel_kwargs = panel_kwargs.copy() if panel_kwargs else {}  # prevent mutation
+
+    if border_style:
         panel_kwargs["border_style"] = border_style
-    if title != "":
+    if title:
         panel_kwargs["title"] = title
 
     console.print(Panel.fit(Markdown(text) if with_markdown else text, **panel_kwargs))
+
+    # Log to file if logger and entry provided
+    if logger and log_entry:
+        logger.log(log_entry)
 
 
 def stream_to_console(
@@ -44,12 +64,30 @@ def stream_to_console(
     config: RunnableConfig,
     title: Optional[str] = "",
     border_style: str = "",
-    panel_kwargs: dict = {},
+    panel_kwargs: Optional[dict] = None,
     with_markdown: bool = True,
+    logger: Optional["SessionLogger"] = None,
+    log_kwargs: Optional[dict] = None,
 ) -> AIMessage:
+    """Stream LLM response to console with a Rich Live panel.
+
+    Args:
+        llm: The language model to invoke.
+        message_list: List of messages to send to the model.
+        config: Runnable configuration.
+        title: Panel title.
+        border_style: Style for panel border.
+        panel_kwargs: Additional panel kwargs.
+        with_markdown: Whether to render as markdown.
+        logger: Optional SessionLogger for file logging.
+        log_kwargs: Optional kwargs for logger.log_assistant() call.
+
+    Returns:
+        The complete AIMessage response.
+    """
     ai_message: AIMessage = None
     streamed_text: str = ""
-    panel_kwargs = panel_kwargs.copy()  # prevent mutation
+    panel_kwargs = panel_kwargs.copy() if panel_kwargs else {}  # prevent mutation
 
     if border_style:
         panel_kwargs["border_style"] = border_style
@@ -91,10 +129,23 @@ def stream_to_console(
         else:
             ai_message += chunk
 
+    # Log to file if logger provided
+    if logger and logger.enabled:
+        kwargs = log_kwargs.copy() if log_kwargs else {}
+        # Add tool calls from response if present
+        if ai_message and getattr(ai_message, "tool_calls", None):
+            kwargs["tool_calls"] = ai_message.tool_calls
+        logger.log_assistant(
+            content=streamed_text,
+            title=title or "Assistant",
+            **kwargs,
+        )
+
     return ai_message
 
 
 def show_startup_screen():
+    """Display the JutulGPT startup screen with ASCII art."""
     subtitle = Text(
         "SINTEF Digital's AI Assistant for JutulDarcy",
         justify="center",
@@ -133,23 +184,21 @@ def show_startup_screen():
 
 
 def edit_document_content(original_content: str, edit_julia_file: bool = False) -> str:
-    """
-    Allow user to edit document content interactively.
+    """Allow user to edit document content in an external editor.
 
     Args:
-        console: Rich console for display
-        original_content: The original document content
+        original_content: The original document content.
+        edit_julia_file: If True, use .jl extension; otherwise .md.
 
     Returns:
-        The edited content
+        The edited content.
     """
-    # External editor option
+    import os
+    import subprocess
+    import tempfile
+
     file_suffix = ".jl" if edit_julia_file else ".md"
     try:
-        import os
-        import subprocess
-        import tempfile
-
         with tempfile.NamedTemporaryFile(
             mode="w+", suffix=file_suffix, delete=False
         ) as f:

@@ -27,8 +27,14 @@ from langgraph.utils.runnable import RunnableCallable
 
 import jutulgpt.state as state
 from jutulgpt.cli import colorscheme, show_startup_screen, stream_to_console
-from jutulgpt.configuration import LLM_TEMPERATURE, PROJECT_ROOT, RECURSION_LIMIT
+from jutulgpt.configuration import (
+    BaseConfiguration,
+    LLM_TEMPERATURE,
+    PROJECT_ROOT,
+    RECURSION_LIMIT,
+)
 from jutulgpt.globals import console
+from jutulgpt.logging import SessionLogger, set_session_logger
 from jutulgpt.state import State
 from jutulgpt.utils import get_provider_and_model
 
@@ -58,6 +64,7 @@ class BaseAgent(ABC):
         self.printed_name = printed_name if printed_name else name
         self.state_schema = state.State
         self.print_chat_output = print_chat_output
+        self._logger: Optional[SessionLogger] = None
 
         # Process tools
         if isinstance(tools, ToolNode):
@@ -215,6 +222,12 @@ class BaseAgent(ABC):
         messages_list: Optional[List] = None,
     ) -> AIMessage:
         """Invoke the model with the given prompt and state."""
+        # Fallback logger init for non-CLI modes (e.g., MCP)
+        if self._logger is None:
+            configuration = BaseConfiguration.from_runnable_config(config=config)
+            self._logger = SessionLogger.from_config(configuration)
+            set_session_logger(self._logger)
+
         model = self._load_model(config=config)
 
         workspace_message = f"**Current workspace:** {os.getcwd()} \n**JutulDarcy documentation and examples can be found at:** {str(PROJECT_ROOT / 'rag' / 'jutuldarcy')}"
@@ -235,11 +248,21 @@ class BaseAgent(ABC):
                 config=config,
                 title=self.printed_name,
                 border_style=colorscheme.normal,
+                logger=self._logger,
             )
 
             response = cast(AIMessage, chat_response)
         else:
             response = cast(AIMessage, model.invoke(messages_list, config))
+            # Log non-streamed responses
+            if self._logger and self._logger.enabled:
+                # response.content can be str or list, convert to str for logging
+                content = response.content if isinstance(response.content, str) else str(response.content)
+                self._logger.log_assistant(
+                    content=content if content else "",
+                    title=self.printed_name or "Assistant",
+                    tool_calls=getattr(response, "tool_calls", None),
+                )
 
         # Add agent name to the response
         response.name = self.name
@@ -337,15 +360,23 @@ class BaseAgent(ABC):
         messages: Sequence[BaseMessage],
         model: Union[BaseChatModel, Runnable[LanguageModelInput, BaseMessage]],
     ) -> Sequence[BaseMessage]:
-        trimmed_state_messages = trim_messages(
+        """
+        Trim messages while keeping AIMessage/ToolMessage pairs intact.
+
+        Uses LangChain's trim_messages with:
+        - start_on="human": ensures we start on a HumanMessage (not orphaned AI/Tool)
+        - end_on=("human", "tool"): ensures we include complete tool call sequences
+        """
+        return trim_messages(
             messages,
             max_tokens=40000,  # adjust for model's context window minus system & files message
             strategy="last",
             token_counter=model,
             include_system=False,  # Not needed since systemMessage is added separately
-            allow_partial=True,
+            start_on="human",
+            end_on=("human", "tool"),
+            allow_partial=False,
         )
-        return trimmed_state_messages
 
     def should_continue(self, state: state.State) -> Literal["tools", "continue"]:
         """
@@ -377,6 +408,10 @@ class BaseAgent(ABC):
         if user_input.strip().lower() in ["q", "quit"]:
             console.print("[bold red]Goodbye![/bold red]")
             exit(0)
+
+        # Log user input
+        if self._logger and self._logger.enabled:
+            self._logger.log_user(content=user_input, title="User")
 
         return {
             "messages": [HumanMessage(content=user_input)],
@@ -417,6 +452,11 @@ Here is the question asked by the other agent:
 
             # Create configuration
             config = RunnableConfig(configurable={}, recursion_limit=RECURSION_LIMIT)
+            configuration = BaseConfiguration.from_runnable_config(config=config)
+
+            # Initialize session logger once at startup
+            self._logger = SessionLogger.from_config(configuration)
+            set_session_logger(self._logger)
 
             # Create initial state conforming to the state schema
             initial_state = {

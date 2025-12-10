@@ -12,8 +12,13 @@ from pydantic import BaseModel, Field
 import jutulgpt.rag.retrieval as retrieval
 import jutulgpt.rag.split_examples as split_examples
 from jutulgpt.cli import colorscheme, print_to_console
-from jutulgpt.configuration import PROJECT_ROOT, BaseConfiguration, cli_mode
+from jutulgpt.configuration import (
+    PROJECT_ROOT,
+    BaseConfiguration,
+    cli_mode,
+)
 from jutulgpt.julia import get_function_documentation_from_list_of_funcs
+from jutulgpt.logging import RAGEntry, ToolEntry, get_session_logger
 from jutulgpt.rag.retriever_specs import RETRIEVER_SPECS
 from jutulgpt.utils import get_file_source
 
@@ -44,13 +49,6 @@ def make_retrieve_tool(
                 from jutulgpt.human_in_the_loop.ui import modify_rag_query
 
                 query = modify_rag_query(query, doc_label)
-        else:
-            print_to_console(
-                text=f"**Query:** `{query}`",
-                title=f"Retrieving from {doc_label} examples",
-                border_style=colorscheme.message,
-            )
-
         if not query.strip():
             return "The query is empty."
 
@@ -64,6 +62,33 @@ def make_retrieve_tool(
             ),
         ) as retriever:
             retrieved_examples = retriever.invoke(query)
+
+        # Format summary of what was retrieved
+        if retrieved_examples:
+            sources = [get_file_source(doc) for doc in retrieved_examples]
+            summary = f"Retrieved {len(retrieved_examples)} examples:\n" + "\n".join(f"- {s}" for s in sources)
+        else:
+            summary = "No examples found"
+
+        # Show results in CLI
+        print_to_console(
+            text=summary,
+            title=f"Retrieving from {doc_label} examples",
+            border_style=colorscheme.message,
+        )
+
+        # Log RAG retrieval with results
+        logger = get_session_logger()
+        if logger:
+            logger.log(
+                RAGEntry(
+                    content=summary,
+                    title=f"Retrieving from {doc_label} examples",
+                    query=query,
+                    source=doc_label,
+                    num_results=len(retrieved_examples) if retrieved_examples else 0,
+                )
+            )
 
         # Human interaction: filter docs/examples
         if configuration.human_interaction.retrieved_examples:
@@ -150,6 +175,18 @@ def retrieve_function_documentation(
         func_names=function_names
     )
 
+    # Log the retrieval
+    logger = get_session_logger()
+    if logger:
+        logger.log(
+            ToolEntry(
+                content=retrieved_signatures or "No documentation found",
+                title="Function Documentation Retriever",
+                tool_name="retrieve_function_documentation",
+                args={"function_names": function_names},
+            )
+        )
+
     if retrieved_signatures:
         return retrieved_signatures
 
@@ -206,6 +243,7 @@ def grep_search(
         if result.stdout:
             lines = result.stdout.strip().split("\n")[:20]  # Limit to 20 results
             match_results = []
+            file_counts: dict[str, int] = {}
             for match in lines:
                 # Parse: filename:line_number:content
                 parts = match.split(":", 2)
@@ -214,16 +252,27 @@ def grep_search(
                     continue
                 filename, line_str, content = parts
                 match_results.append(f"File: {filename}, Line {line_str}: {content}")
+                file_counts[filename] = file_counts.get(filename, 0) + 1
 
-            print_text = (
-                f"Found {len(match_results)} matches:\n\n"
-                "```text\n" + "\n\n".join(match_results) + "\n```"
-            )
+            # Summary for CLI and log
+            file_list = "\n".join(f"- {f} ({c} matches)" for f, c in file_counts.items())
+            summary = f"Found {len(match_results)} matches in {len(file_counts)} files:\n{file_list}"
             print_to_console(
-                text=print_text[:500] + "...",
+                text=summary,
                 title=f"Grep search: {query}",
                 border_style=colorscheme.message,
             )
+            logger = get_session_logger()
+            if logger:
+                logger.log(
+                    ToolEntry(
+                        content=summary,
+                        title=f"Grep search: {query}",
+                        tool_name="grep_search",
+                        args={"query": query, "includePattern": includePattern},
+                    )
+                )
+
             out_text = f"Found {len(match_results)} matches:\n" + "\n\n".join(
                 match_results
             )
