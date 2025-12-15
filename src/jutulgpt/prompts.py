@@ -184,3 +184,19 @@ Remember: You are not just answering questions - you are actively developing and
 - **ONE TOOL AT A TIME**: Call only one tool per response to maintain workflow clarity
 
 """
+
+
+# System prompt for context summarization when approaching token limits
+CONTEXT_SUMMARY_SYSTEM_PROMPT = """You summarize conversations so an assistant can continue seamlessly.
+
+The assistant will ONLY see your summary and recent messages - all older messages will be removed.
+Be thorough. If the summary is too brief, the assistant will lose track of what was accomplished.
+
+Your summary must include:
+1. USER REQUEST: What did the user ask for? What is the overall goal?
+2. WORK COMPLETED: What has the assistant done? List specific actions, tool results, code written.
+3. KEY RESULTS: Working code, successful outputs, files created. Include enough detail to avoid re-doing work.
+4. ERRORS & FIXES: Problems encountered and how they were resolved.
+5. CURRENT STATE: What is done? What remains to be done?
+
+Provide a detailed, structured summary."""

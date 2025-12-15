@@ -6,6 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from jutulgpt.cli import colorscheme, print_to_console
 from jutulgpt.configuration import (
     DISPLAY_CONTENT_MAX_LENGTH,
+    OUTPUT_TRUNCATION_LIMIT,
     BaseConfiguration,
     cli_mode,
 )
@@ -106,17 +107,25 @@ def _run_julia_code(code: str, print_code: bool = True) -> tuple[str, bool]:
     if result.get("error", False):
         julia_error_message = get_error_message(result)
 
+        # Truncate for display/logging if message is very long
+        is_truncated = len(julia_error_message) > OUTPUT_TRUNCATION_LIMIT
+        display_error = _truncate(julia_error_message, OUTPUT_TRUNCATION_LIMIT)
+
+        truncation_note = ""
+        if is_truncated:
+            truncation_note = f"\n\n[Truncated: {len(julia_error_message):,} chars → {OUTPUT_TRUNCATION_LIMIT:,} chars]"
+
         print_to_console(
-            text=f"Code failed!\n\n{julia_error_message}",
+            text=f"Code failed!\n\n{display_error}{truncation_note}",
             title="Code Runner",
             border_style=colorscheme.error,
         )
 
-        # Log failure
+        # Log failure with truncated error
         if logger:
             logger.log(
                 CodeRunnerEntry(
-                    content=f"Code failed!\n\n{julia_error_message}",
+                    content=f"Code failed!\n\n{display_error}{truncation_note}",
                     title="Code Runner",
                     code=code,
                     language="julia",
@@ -124,11 +133,16 @@ def _run_julia_code(code: str, print_code: bool = True) -> tuple[str, bool]:
                 )
             )
 
+        # Return truncated error to agent
         code_runner_error_message = (
             "## Code runner error:\n"
             + "Running the code generated failed with the following error:\n"
-            + julia_error_message
+            + display_error
         )
+        if is_truncated:
+            code_runner_error_message += (
+                f"\n\n(Error output truncated from {len(julia_error_message):,} to {OUTPUT_TRUNCATION_LIMIT:,} characters)"
+            )
         return code_runner_error_message, True
 
     runtime = round(result['runtime'], 2)

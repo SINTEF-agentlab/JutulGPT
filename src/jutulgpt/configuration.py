@@ -9,7 +9,15 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Annotated, Any, Literal, Optional, Type, TypeVar
 
+# Load environment before importing LangChain (it checks for tracing at import time)
 from dotenv import load_dotenv
+
+load_dotenv()
+
+if os.environ.get("LANGSMITH_API_KEY"):
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+    os.environ.setdefault("LANGSMITH_TRACING", "true")
+
 from langchain_core.runnables import RunnableConfig, ensure_config
 from pydantic import BaseModel, ConfigDict
 
@@ -33,8 +41,30 @@ EMBEDDING_MODEL_NAME = (
 RECURSION_LIMIT = 200  # Number of recursions before an error is thrown.
 LLM_TEMPERATURE = 0
 
-# Display settings - used for both console output and log files
-DISPLAY_CONTENT_MAX_LENGTH = 800  # Max characters to display for tool outputs
+# Display settings - for console and log output (not context management)
+DISPLAY_CONTENT_MAX_LENGTH = 800  # Max chars to display in console/logs
+
+# Context management settings
+# ┌─────────────────────────────────────────────────────────────────┐
+# │  MODEL_CONTEXT_WINDOW (200k tokens)                             │
+# │  ├── System prompt + workspace + summary                        │
+# │  ├── Tool definitions                                           │
+# │  ├── Tool results (ToolMessages + tool_calls)                   │
+# │  └── Messages (Human + AI content)                              │
+# │                                                                 │
+# │  Thresholds (fractions of MODEL_CONTEXT_WINDOW):                │
+# │  ├── CONTEXT_USAGE_THRESHOLD (0.7) → trigger summarization      │
+# │  └── CONTEXT_TRIM_THRESHOLD (0.9)  → safety trim if needed      │
+# └─────────────────────────────────────────────────────────────────┘
+MODEL_CONTEXT_WINDOW = 200000  # Total context budget in tokens
+CONTEXT_USAGE_THRESHOLD = 0.7  # Summarization trigger threshold
+CONTEXT_TRIM_THRESHOLD = 0.9  # Safety trim threshold (if summarization didn't compress enough)
+CONTEXT_DISPLAY_THRESHOLD = 0.3  # Show context usage display threshold
+RECENT_MESSAGES_TO_KEEP = 10  # Messages to preserve when summarizing
+
+# Truncation limits (chars)
+OUTPUT_TRUNCATION_LIMIT = 8000  # Guards against large outputs filling context
+SUMMARY_MSG_LIMIT = 1000  # Guards against large messages filling context when summarizing
 
 
 # Setup of the environment and some logging. Not neccessary to touch this.
@@ -44,7 +74,6 @@ def _set_env(var: str):
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-load_dotenv()
 _set_env("OPENAI_API_KEY")
 _set_env("LANGSMITH_API_KEY")
 
@@ -192,6 +221,32 @@ class BaseConfiguration:
         default=True,
         metadata={
             "description": "Include Julia/Jutul/JutulDarcy versions in log header."
+        },
+    )
+
+    # Context management
+    show_context_usage: bool = field(
+        default=True,
+        metadata={
+            "description": "Display context usage stats in CLI after each model call."
+        },
+    )
+    context_window_size: int = field(
+        default=MODEL_CONTEXT_WINDOW,
+        metadata={
+            "description": "Model context window size in tokens."
+        },
+    )
+    context_summarize_threshold: float = field(
+        default=CONTEXT_USAGE_THRESHOLD,
+        metadata={
+            "description": "Fraction of context at which to start summarizing (0.0-1.0)."
+        },
+    )
+    context_display_threshold: float = field(
+        default=CONTEXT_DISPLAY_THRESHOLD,
+        metadata={
+            "description": "Only show context display when usage exceeds this fraction (0.0-1.0)."
         },
     )
 

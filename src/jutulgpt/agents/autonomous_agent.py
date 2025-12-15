@@ -118,19 +118,18 @@ class AutonomousAgent(BaseAgent):
 
         # Check if we need more steps
         if self._are_more_steps_needed(state, response):
-            return {
-                "messages": [
-                    AIMessage(
-                        id=response.id,
-                        content="Sorry, need more steps to process this request.",
-                    )
-                ]
-            }
+            fallback = AIMessage(
+                id=response.id,
+                content="Sorry, need more steps to process this request.",
+            )
+            return {"messages": self._finalize_context(fallback)}
 
         code_block = get_code_from_response(response=response.content)
 
+        # Finalize context: bundle response with any pending state changes
+        messages = self._finalize_context(response)
         return {
-            "messages": [response],
+            "messages": messages,
             "code_block": code_block,
             "error": False,
             "mcp_answer": response.content,
