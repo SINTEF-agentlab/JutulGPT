@@ -21,7 +21,7 @@ from jutulgpt.tools import (
     retrieve_jutuldarcy_examples,
     write_to_file,
 )
-from jutulgpt.utils import get_code_from_response
+from jutulgpt.utils import get_code_from_response, get_message_text
 
 
 class Agent(BaseAgent):
@@ -135,7 +135,10 @@ class Agent(BaseAgent):
             )
             return {"messages": self._finalize_context(fallback)}
 
-        code_block = get_code_from_response(response=response.content)
+        # With OpenAI Responses API, response.content may be a list of content blocks.
+        # Always use the normalized text view for downstream parsing.
+        response_text = get_message_text(response)
+        code_block = get_code_from_response(response=response_text)
 
         # Finalize context: bundle response with any pending state changes
         messages = self._finalize_context(response)

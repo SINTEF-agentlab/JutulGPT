@@ -124,19 +124,29 @@ uv run examples/autonomous_agent.py
 
 The agent is configured in the `src/jutulgpt/configuration.py` file.  
 
-The two main settings you must specify are
+### Model selection (recommended: CLI flag)
+
+You can select the model at startup with `--model`. The default is:
+
+- `--model gpt-5.1-mini-reasoning` (alias for the `gpt-5-mini-reasoning` preset)
+
+Examples:
 
 ```bash
-# Static settings
-cli_mode: bool = True
-
-# Select whether to use local models through Ollama or use OpenAI
-LOCAL_MODELS = False
-LLM_MODEL_NAME = "ollama:qwen3:14b" if LOCAL_MODELS else "openai:gpt-4.1"
-EMBEDDING_MODEL_NAME = (
-    "ollama:nomic-embed-text" if LOCAL_MODELS else "openai:text-embedding-3-small"
-)
+uv run examples/agent.py --model gpt-4.1
+uv run examples/autonomous_agent.py --model gpt-5.1-reasoning
+uv run examples/autonomous_agent.py --model qwen3:14b-thinking
 ```
+
+### Model configuration (presets)
+
+Model presets are defined as `ModelConfig` constants in `src/jutulgpt/configuration.py`:
+
+- `provider` / `model`
+- `context_window` (used by context tracking/summarization)
+- `llm_kwargs` (provider-specific kwargs forwarded to LangChain `init_chat_model(...)`)
+
+See `docs/model_configuration.md` for the full table and details.
 
 More advanced settings are set in the `BaseConfiguration`. LangGraph will turn these into a `RunnableConfig`, which enables easier configuration at runtime.  You specify the following settings:
 
@@ -147,7 +157,7 @@ More advanced settings are set in the `BaseConfiguration`. LangGraph will turn t
 - `examples_search_kwargs`: Keyword arguments to pass to the search function of the retriever when retrieving examples. See [LangGraph documentation](https://python.langchain.com/api_reference/chroma/vectorstores/langchain_chroma.vectorstores.Chroma.html#langchain_chroma.vectorstores.Chroma.as_retriever) for details about what arguments works for the different search types.
 - `rerank_provider`: The provider user for reranking the retrieved documents.
 - `rerank_kwargs`: Keyword arguments provided to the reranker.
-- `agent_model`: The language model used for generating responses. Should be in the form: provider/model-name. Currently I have only tested using `OpenAI` or `Ollama` models, but should be easy to extend to other providers. By default equal to the `LLM_MODEL_NAME`.
+- `agent_model`: The language model used for generating responses. Should be in the form `provider:model`. Defaults to the active preset (see `ACTIVE_MODEL`).
 - `autonomous_agent_model`: See `agent_model`.
 - `agent_prompt`: The prompt used for the agent.
 - `autonomous_agent_prompt`: The prompt used for the autonomous agent.

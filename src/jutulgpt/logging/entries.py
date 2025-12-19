@@ -54,6 +54,7 @@ class AssistantEntry(LogEntry):
     entry_type: EntryType = field(default=EntryType.ASSISTANT, init=False)
     tool_calls: Optional[list[dict[str, Any]]] = None
     config: Optional[dict[str, Any]] = None
+    reasoning_summary: Optional[str] = None
 
 
 @dataclass

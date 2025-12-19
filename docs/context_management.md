@@ -5,7 +5,7 @@ How JutulGPT manages LLM context for long conversations.
 ## Context Budget
 
 ```
-┌─────────────────── MODEL_CONTEXT_WINDOW (200k) ───────────────────┐
+┌────────────── MODEL_CONTEXT_WINDOW (active model) ────────────────┐
 │                                                                   │
 │  System (static, counted once):                                   │
 │  ├── System prompt + workspace info                               │
@@ -17,15 +17,15 @@ How JutulGPT manages LLM context for long conversations.
 │  └── Messages (HumanMessage + AIMessage content)                  │
 │                                                                   │
 │  Thresholds:                                                      │
-│  ├── 70% (140k) → Summarization triggered                         │
-│  └── 90% (180k) → Safety trim applied                             │
+│  ├── 70% → Summarization triggered                                │
+│  └── 90% → Safety trim applied                                    │
 │                                                                   │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
 | Constant | Default | Purpose |
 |----------|---------|---------|
-| `MODEL_CONTEXT_WINDOW` | 200k tokens | Total context budget |
+| `MODEL_CONTEXT_WINDOW` | from `ACTIVE_MODEL_CONFIG.context_window` | Total context budget |
 | `CONTEXT_USAGE_THRESHOLD` | 0.7 | Trigger summarization at 70% |
 | `CONTEXT_TRIM_THRESHOLD` | 0.9 | Safety trim at 90% (fallback) |
 | `CONTEXT_DISPLAY_THRESHOLD` | 0.3 | Show usage display above 30% |

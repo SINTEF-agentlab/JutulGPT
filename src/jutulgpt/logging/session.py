@@ -168,11 +168,18 @@ class SessionLogger:
 
     def _format_assistant_entry(self, entry: AssistantEntry) -> str:
         """Format an assistant response entry."""
-        lines = [f"## {entry.title}\n\n"]
+        has_reasoning = bool(entry.reasoning_summary)
+        has_content = bool(entry.content)
 
-        # Main content
-        if entry.content:
-            lines.append(f"{entry.content}\n")
+        lines: list[str] = []
+
+        if has_reasoning and entry.reasoning_summary is not None:
+            lines.append("## Reasoning Summary\n\n")
+            lines.append(f"{entry.reasoning_summary.strip()}\n\n")
+
+        lines.append(f"## {entry.title}\n\n")
+        if has_content:
+            lines.append(f"{entry.content.strip()}\n")
 
         # Tool calls section
         if entry.tool_calls:
@@ -288,6 +295,7 @@ class SessionLogger:
         title: str = "JutulGPT",
         tool_calls: Optional[list] = None,
         config: Optional[dict] = None,
+        reasoning_summary: Optional[str] = None,
     ) -> None:
         """Convenience method to log an assistant response."""
         self.log(
@@ -296,6 +304,7 @@ class SessionLogger:
                 title=title,
                 tool_calls=tool_calls,
                 config=config,
+                reasoning_summary=reasoning_summary,
             )
         )
 

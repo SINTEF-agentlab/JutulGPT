@@ -27,20 +27,24 @@ from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.utils.runnable import RunnableCallable
 
 import jutulgpt.state as state
-from jutulgpt.cli import colorscheme, show_startup_screen, stream_to_console
+from jutulgpt.cli import (
+    colorscheme,
+    show_startup_screen,
+    stream_to_console,
+)
 from jutulgpt.configuration import (
     BaseConfiguration,
     CONTEXT_TRIM_THRESHOLD,
-    LLM_TEMPERATURE,
     PROJECT_ROOT,
     RECENT_MESSAGES_TO_KEEP,
     RECURSION_LIMIT,
+    cli_mode,
 )
 from jutulgpt.context import ContextTracker, summarize_conversation
 from jutulgpt.globals import console
 from jutulgpt.logging import SessionLogger, set_session_logger
 from jutulgpt.state import State
-from jutulgpt.utils import get_provider_and_model
+from jutulgpt.utils import get_message_text, get_provider_and_model, load_chat_model
 
 
 class BaseAgent(ABC):
@@ -92,6 +96,49 @@ class BaseAgent(ABC):
 
         # WARNING: This requires connection to internet. Therefore it is currently commented out.
         # self.generate_graph_visualization()
+
+    @staticmethod
+    def _ensure_string_content(msg: BaseMessage) -> BaseMessage:
+        """Return a message with `content` converted to a plain string.
+
+        Some providers (notably OpenAI Responses) may return structured blocks in
+        `message.content`. This breaks downstream token counting / trimming which
+        expects a string. We store only the plain-text view in state/history.
+        """
+        if not hasattr(msg, "content") or isinstance(getattr(msg, "content"), str):
+            return msg
+
+        text = get_message_text(msg)
+
+        # Pydantic v2 (LangChain >=0.3): immutable copy
+        try:
+            return msg.model_copy(update={"content": text})  # type: ignore[attr-defined]
+        except Exception:
+            # Fallback: in-place assignment (best effort)
+            try:
+                msg.content = text  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            return msg
+
+    def _apply_cli_model_selection(self) -> bool:
+        """Apply `--model` preset selection for CLI runs.
+
+        Returns False if argparse handled `-h/--help` (i.e. should exit).
+        """
+        if not cli_mode:
+            return True
+
+        from jutulgpt.cli.model_cli import apply_model_from_cli, parse_cli_args
+
+        try:
+            args = parse_cli_args()
+        except SystemExit:
+            # argparse handled -h/--help
+            return False
+
+        apply_model_from_cli(args.model)
+        return True
 
     @abstractmethod
     def get_prompt_from_config(self, config: RunnableConfig) -> str:
@@ -161,31 +208,7 @@ class BaseAgent(ABC):
     def _get_chat_model(self, model: Union[str, LanguageModelLike]) -> BaseChatModel:
         """Setup and bind tools to the model."""
         if isinstance(model, str):
-            try:
-                from langchain.chat_models import init_chat_model
-            except ImportError:
-                raise ImportError("Please install langchain to use string model names")
-
-            provider, model_name = get_provider_and_model(model)
-
-            if (
-                provider == "ollama" and model_name == "qwen3:14b"
-            ):  # WARNING: This is bad practice!
-                chat_model = init_chat_model(
-                    model_name,
-                    model_provider=provider,
-                    temperature=LLM_TEMPERATURE,
-                    reasoning=True,
-                    streaming=True,
-                )
-            else:
-                chat_model = init_chat_model(
-                    model_name,
-                    model_provider=provider,
-                    temperature=LLM_TEMPERATURE,
-                    streaming=True,
-                )
-            model = cast(BaseChatModel, chat_model)
+            model = cast(BaseChatModel, load_chat_model(model))
 
         # Get the underlying model
         if isinstance(model, RunnableSequence):
@@ -385,7 +408,7 @@ class BaseAgent(ABC):
         and returns the final message list for the model.
         """
         configuration = BaseConfiguration.from_runnable_config(config=config)
-        all_messages = list(state_messages)
+        all_messages = [self._ensure_string_content(m) for m in state_messages]
         summarization_happened = False
 
         # Compress old messages if context usage exceeds threshold
@@ -499,6 +522,11 @@ class BaseAgent(ABC):
         if self._messages_to_remove:
             updates.extend(self._messages_to_remove)
             self._messages_to_remove = []
+
+        # Store a plain-text version of the assistant message in state to avoid
+        # carrying provider-specific structured blocks into later token counting.
+        response = cast(AIMessage, self._ensure_string_content(response))
+
         updates.append(response)
         return updates
 
@@ -573,6 +601,10 @@ Here is the question asked by the other agent:
             raise ValueError("Cannot run standalone mode when part_of_multi_agent=True")
 
         try:
+            # CLI model selection (before config/logger initialization)
+            if not self._apply_cli_model_selection():
+                return
+
             show_startup_screen()
 
             # Create configuration
