@@ -7,8 +7,54 @@ from rich.table import Table
 import jutulgpt.cli.cli_utils as utils
 from jutulgpt.cli.cli_colorscheme import colorscheme
 from jutulgpt.globals import console
+from jutulgpt.logging.session import get_session_logger
 from jutulgpt.rag.utils import modify_doc_content
 from jutulgpt.utils import add_julia_context
+
+from .interactions import (
+    Action,
+    CHECK_CODE,
+    ON_ERROR,
+    RAG_DOCS,
+    RAG_QUERY,
+    TERMINAL_RUN,
+    Interaction,
+    Option,
+)
+
+
+def _prompt(interaction: Interaction) -> Option:
+    """Display interaction options and get user choice.
+
+    Args:
+        interaction: The interaction definition
+
+    Returns:
+        Option: The selected option
+    """
+    console.print(f"\n[bold yellow]{interaction.title}[/bold yellow]")
+
+    keys = []
+    for i, opt in enumerate(interaction.options, 1):
+        label = f"{i}. {opt.label}"
+        console.print(label)
+        keys.append(str(i))
+
+    default_idx = str(
+        next(
+            i for i, o in enumerate(interaction.options, 1) if o.action == interaction.default
+        )
+    )
+    choice = Prompt.ask("Your choice", choices=keys, default=default_idx)
+
+    selected_option = interaction.options[int(choice) - 1]
+
+    # Log the interaction
+    logger = get_session_logger()
+    if logger:
+        logger.log_interaction(interaction, selected_option.action, selected_option.label)
+
+    return selected_option
 
 
 def response_on_rag(
@@ -19,16 +65,15 @@ def response_on_rag(
     action_name: str = "Modify retrieved documents",
     edit_julia_file: bool = False,
 ) -> List[Document]:
-    """
-    CLI version of response_on_rag that allows interactive document filtering/editing.
+    """CLI version of response_on_rag that allows interactive document filtering/editing.
 
     Args:
-       console: Rich console for display
         docs: List of retrieved documents
         get_file_source: Function to get the file source of a document
         get_section_path: Function to get the section path of a document
         format_doc: Function to format a document for display
         action_name: Name of the action for display
+        edit_julia_file: Whether to wrap content in Julia code blocks
 
     Returns:
         List of documents after user interaction
@@ -39,16 +84,13 @@ def response_on_rag(
 
     console.print(f"\n[bold blue]{action_name}[/bold blue]")
     console.print(f"Found {len(docs)} document(s). Choose what to do:")
-    console.print("1. Accept all documents")
-    console.print("2. Review and filter documents")
-    console.print("3. Reject all documents")
 
-    choice = Prompt.ask("Your choice", choices=["1", "2", "3"], default="1")
+    selected_option = _prompt(RAG_DOCS)
 
-    if choice == "1":
+    if selected_option.action == Action.ACCEPT:
         console.print("[green]✓ Accepting all documents[/green]")
         return docs
-    elif choice == "3":
+    elif selected_option.action == Action.REJECT:
         console.print("[red]✗ Rejecting all documents[/red]")
         return []
 
@@ -151,29 +193,30 @@ def response_on_check_code(code: str) -> tuple[bool, str, str]:
     Returns:
         bool: Whether the user wants to check the code or not
         str: Additional feedback to the model
+        str: The code to check (potentially edited)
     """
-    console.print("\n[bold yellow]Code found in response[/bold yellow]")
+    selected_option = _prompt(CHECK_CODE)
 
-    console.print("Do you want to check the code for any potential errors?")
-    console.print("1. Check the code")
-    console.print("2. Give feedback and regenerate response")
-    console.print("3. Edit the code manually")
-    console.print("4. Skip code check")
-
-    choice = Prompt.ask("Your choice", choices=["1", "2", "3", "4"], default="1")
-
-    if choice == "1":
+    if selected_option.action == Action.ACCEPT:
         console.print("[green]✓ Running code checks[/green]")
         return True, "", code
-    elif choice == "2":
+    elif selected_option.action == Action.FEEDBACK:
         console.print("[bold blue]Give feedback:[/bold blue] ")
         user_input = console.input("> ")
         if not user_input.strip():  # If the user input is empty
             console.print("[red]✗ User feedback empty[/red]")
             return False, "", code
-        console.print("[green]✓ Feedback recieved[/green]")
+        console.print("[green]✓ Feedback received[/green]")
+
+        # Log the feedback text
+        logger = get_session_logger()
+        if logger:
+            logger.log_interaction(
+                CHECK_CODE, selected_option.action, selected_option.label, user_input=user_input
+            )
+
         return False, user_input, code
-    elif choice == "3":
+    elif selected_option.action == Action.EDIT:
         console.print("\n[bold]Edit Code[/bold]")
         new_code = utils.edit_document_content(code, edit_julia_file=True)
 
@@ -185,10 +228,9 @@ def response_on_check_code(code: str) -> tuple[bool, str, str]:
             )
             console.print("[green]✓ Code updated[/green]")
             return True, "", new_code
-        console.print("[red]✓ Code empty. Not updating![/red]")
+        console.print("[red]✗ Code empty. Not updating![/red]")
         return True, "", code
-
-    else:  # choice == "4"
+    else:  # SKIP
         console.print("[red]✗ Skipping code checks[/red]")
         return False, "", code
 
@@ -196,30 +238,31 @@ def response_on_check_code(code: str) -> tuple[bool, str, str]:
 def response_on_error() -> tuple[bool, str]:
     """
     Returns:
-        bool: Whether the user wants to check the code or not
+        bool: Whether the user wants to try fixing the code
         str: Additional feedback to the model
     """
-    console.print("\n[bold red]Code check failed[/bold red]")
+    selected_option = _prompt(ON_ERROR)
 
-    console.print("What do you want to do?")
-    console.print("1. Try to fix the code")
-    console.print("2. Give extra feedback to the model on what might be wrong")
-    console.print("3. Skip code fixing")
-
-    choice = Prompt.ask("Your choice", choices=["1", "2", "3"], default="1")
-
-    if choice == "1":
+    if selected_option.action == Action.ACCEPT:
         console.print("[green]✓ Trying to fix code[/green]")
         return True, ""
-    elif choice == "2":
+    elif selected_option.action == Action.FEEDBACK:
         console.print("[bold blue]Give feedback:[/bold blue]")
         user_input = console.input("> ")
         if not user_input.strip():  # If the user input is empty
             console.print("[red]✗ User feedback empty[/red]")
             return True, ""
         console.print("[green]✓ Feedback received[/green]")
+
+        # Log the feedback text
+        logger = get_session_logger()
+        if logger:
+            logger.log_interaction(
+                ON_ERROR, selected_option.action, selected_option.label, user_input=user_input
+            )
+
         return True, user_input
-    else:  # choice == "3"
+    else:  # SKIP
         console.print("[red]✗ Skipping code fix[/red]")
         return False, ""
 
@@ -229,33 +272,24 @@ def modify_rag_query(query: str, retriever_name: str) -> str:
     CLI version of modify_rag_query that allows interactive query modification.
 
     Args:
-        console: Rich console for display
         query: The original query string
         retriever_name: Name of the retriever (e.g., "JutulDarcy", "Fimbul")
 
     Returns:
-        str: The potentially modified query
+        str: The potentially modified query (empty string if skipped)
     """
-    console.print(f"\n[bold yellow]{retriever_name} Query Review[/bold yellow]")
-
     utils.print_to_console(
         text=f"**Original Query:** `{query}`",
         title=f"Retrieving from {retriever_name}",
         border_style=colorscheme.warning,
     )
 
-    console.print("\nWhat would you like to do with this query?")
-    console.print("1. Accept the query as-is")
-    console.print("2. Edit the query")
-    console.print("3. Skip retrieval completely")
+    selected_option = _prompt(RAG_QUERY)
 
-    choice = Prompt.ask("Your choice", choices=["1", "2", "3"], default="1")
-
-    if choice == "1":
+    if selected_option.action == Action.ACCEPT:
         console.print(f"[green]✓ Using original query for {retriever_name}[/green]")
         return query
-
-    elif choice == "2":
+    elif selected_option.action == Action.EDIT:
         new_query = utils.edit_document_content(query)
 
         if new_query.strip():
@@ -265,12 +299,11 @@ def modify_rag_query(query: str, retriever_name: str) -> str:
                 title="Updated Query",
                 border_style=colorscheme.success,
             )
-
             return new_query.strip()
         else:
             console.print("[yellow]⚠ Empty query, using original[/yellow]")
             return query
-    else:  # choice == "3"
+    else:  # SKIP
         console.print(f"[red]✗ Skipping {retriever_name} retrieval[/red]")
         return ""  # Return empty string to indicate no query
 
@@ -283,39 +316,30 @@ def modify_terminal_run(command: str) -> tuple[bool, str]:
         command: The original terminal command string
 
     Returns:
-        bool: Whether the command is allowed to run
-        str: The potentially modified query
-
+        tuple[bool, str]: (should_run, command)
+            - should_run: Whether the command is allowed to run
+            - command: The potentially modified command
     """
-    console.print("\n[bold yellow] Terminal Command Review[/bold yellow]")
-
     utils.print_to_console(
         text=f"**Command:** `{command}`",
         title="Trying to run in terminal",
         border_style=colorscheme.warning,
     )
 
-    console.print("\nWhat would you like to do with this command?")
-    console.print("1. Accept and run the command")
-    console.print("2. Edit the command and run")
-    console.print("3. Not run the command at all")
+    selected_option = _prompt(TERMINAL_RUN)
 
-    choice = Prompt.ask("Your choice", choices=["1", "2", "3"], default="3")
-
-    if choice == "1":
+    if selected_option.action == Action.ACCEPT:
         console.print("[green]✓ Running original command[/green]")
         return True, command
-
-    elif choice == "2":
+    elif selected_option.action == Action.EDIT:
         new_command = utils.edit_document_content(command)
 
         if new_command.strip():
             console.print("[green]✓ Running updated command[/green]")
-
             return True, new_command
         else:
             console.print("[yellow]⚠ Empty command. Not running[/yellow]")
             return False, command
-    else:  # choice == "3"
+    else:  # SKIP
         console.print("[red]✗ Skipping running command[/red]")
         return False, command

@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from jutulgpt.human_in_the_loop.interactions import Interaction
 
 
 class EntryType(str, Enum):
@@ -16,6 +19,7 @@ class EntryType(str, Enum):
     USER = "user"
     SYSTEM = "system"
     RAG = "rag"
+    INTERACTION = "interaction"
 
 
 @dataclass
@@ -113,3 +117,21 @@ class CodeRunnerEntry(LogEntry):
     code: Optional[str] = None
     language: str = "julia"
     success: Optional[bool] = None
+
+
+@dataclass
+class InteractionEntry(LogEntry):
+    """Log entry for human-in-the-loop interactions.
+
+    Attributes:
+        content: The selected option label (e.g., "Check the code").
+        title: The interaction title (e.g., "Code found in response").
+        interaction: The interaction definition for displaying options.
+        action: The action the user chose (e.g., "accept").
+        user_input: Additional text input provided by user (for feedback/edits).
+    """
+
+    entry_type: EntryType = field(default=EntryType.INTERACTION, init=False)
+    interaction: "Interaction | None" = None
+    action: str = ""
+    user_input: Optional[str] = None

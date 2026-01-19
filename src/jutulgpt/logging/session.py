@@ -14,6 +14,7 @@ from jutulgpt.julia.version_info import get_version_info
 from jutulgpt.logging.entries import (
     AssistantEntry,
     CodeRunnerEntry,
+    InteractionEntry,
     LogEntry,
     RAGEntry,
     ToolEntry,
@@ -28,6 +29,7 @@ from jutulgpt.logging.formatters import (
 
 if TYPE_CHECKING:
     from jutulgpt.configuration import BaseConfiguration
+    from jutulgpt.human_in_the_loop.interactions import Action, Interaction
 
 
 class SessionLogger:
@@ -156,6 +158,8 @@ class SessionLogger:
             formatted = self._format_user_entry(entry)
         elif isinstance(entry, RAGEntry):
             formatted = self._format_rag_entry(entry)
+        elif isinstance(entry, InteractionEntry):
+            formatted = self._format_interaction_entry(entry)
         else:
             formatted = self._format_generic_entry(entry)
 
@@ -279,6 +283,33 @@ class SessionLogger:
         lines.append("\n---\n\n")
         return "".join(lines)
 
+    def _format_interaction_entry(self, entry: InteractionEntry) -> str:
+        """Format a human-in-the-loop interaction entry."""
+        if not entry.interaction:
+            return ""
+
+        lines = [f"#### {entry.title}\n\n"]
+
+        # Show interaction name
+        lines.append(f"**Interaction:** `{entry.interaction.name}`\n\n")
+
+        # Show available options
+        lines.append("**Options:**\n\n")
+        for i, opt in enumerate(entry.interaction.options, 1):
+            lines.append(f"- {i}. {opt.label}\n")
+        lines.append("\n")
+
+        # Show action with label
+        action_text = f"`{entry.action}` → {entry.content}"
+        lines.append(f"**Action:** {action_text}\n\n")
+
+        # Show user's actual input (for feedback/edits)
+        if entry.user_input:
+            lines.append(f"**User Input:**\n\n> {entry.user_input}\n\n")
+
+        lines.append("\n---\n\n")
+        return "".join(lines)
+
     def _format_generic_entry(self, entry: LogEntry) -> str:
         """Format a generic log entry."""
         lines = [self._format_entry_header(entry)]
@@ -368,6 +399,37 @@ class SessionLogger:
                 query=query,
                 source=source,
                 num_results=num_results,
+            )
+        )
+
+    def log_interaction(
+        self,
+        interaction: "Interaction",
+        action: "Action",
+        label: str = "",
+        user_input: Optional[str] = None,
+    ) -> None:
+        """Convenience method to log a human-in-the-loop interaction.
+
+        Args:
+            interaction: The interaction definition
+            action: The action the user selected
+            label: The selected option label (if not provided, derived from interaction)
+            user_input: Optional user text input
+        """
+        # If label not provided, derive it from interaction options
+        if not label:
+            label = next(
+                (opt.label for opt in interaction.options if opt.action == action), ""
+            )
+
+        self.log(
+            InteractionEntry(
+                content=label,
+                title=interaction.title,
+                interaction=interaction,
+                action=action.value,
+                user_input=user_input,
             )
         )
 
