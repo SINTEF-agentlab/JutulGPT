@@ -71,6 +71,27 @@ OPENAI_GPT_4_1 = ModelConfig(
         "verbosity": "medium",
     },
 )
+OPENAI_GPT_5_MINI = ModelConfig(
+    provider="openai",
+    model="gpt-5-mini",
+    context_window=200000,
+    llm_kwargs={
+        "temperature": 0.0,
+        "use_responses_api": True,
+        "verbosity": "low",
+    },
+)
+OPENAI_GPT_5_MINI_REASONING = ModelConfig(
+    provider="openai",
+    model="gpt-5-mini",
+    context_window=200000,
+    llm_kwargs={
+        "temperature": 0.0,
+        "use_responses_api": True,
+        "verbosity": "low",
+        "reasoning": {"effort": "medium", "summary": "auto"},
+    },
+)
 OPENAI_GPT_5_1 = ModelConfig(
     provider="openai",
     model="gpt-5.1",
@@ -92,9 +113,9 @@ OPENAI_GPT_5_1_REASONING = ModelConfig(
         "reasoning": {"effort": "medium", "summary": "auto"},
     },
 )
-OPENAI_GPT_5_MINI = ModelConfig(
+OPENAI_GPT_5_2 = ModelConfig(
     provider="openai",
-    model="gpt-5-mini",
+    model="gpt-5.2",
     context_window=200000,
     llm_kwargs={
         "temperature": 0.0,
@@ -102,9 +123,9 @@ OPENAI_GPT_5_MINI = ModelConfig(
         "verbosity": "low",
     },
 )
-OPENAI_GPT_5_MINI_REASONING = ModelConfig(
+OPENAI_GPT_5_2_REASONING = ModelConfig(
     provider="openai",
-    model="gpt-5-mini",
+    model="gpt-5.2",
     context_window=200000,
     llm_kwargs={
         "temperature": 0.0,
@@ -142,8 +163,10 @@ OLLAMA_QWEN3_14B = ModelConfig(
 
 # ┌──────────────────────────────────────────────────────────────────────────────┐
 # │  MODEL CONFIGURATION - Change these values to switch models                  │
+# │  DEFAULT_MODEL_PRESET is used by the CLI when you omit --model.              │
 # └──────────────────────────────────────────────────────────────────────────────┘
-ACTIVE_MODEL_CONFIG: ModelConfig = OPENAI_GPT_5_MINI_REASONING
+DEFAULT_MODEL_PRESET: str = "gpt-5.2-reasoning"
+ACTIVE_MODEL_CONFIG: ModelConfig = OPENAI_GPT_5_2_REASONING
 
 # Print/log the reasoning summary blocks (if returned by OpenAI)
 SHOW_REASONING_SUMMARY: bool = True

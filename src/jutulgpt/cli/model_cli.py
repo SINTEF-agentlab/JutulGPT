@@ -20,24 +20,15 @@ def resolve_model_config(name: str) -> cfg.ModelConfig:
     """Resolve a CLI `--model` string to a `ModelConfig` preset."""
     key = _normalize_model_name(name)
 
-    # Aliases for convenience / backwards compatibility
-    aliases: dict[str, str] = {
-        # Requested default spelling (maps to gpt-5-mini reasoning preset)
-        "gpt-5.1-mini-reasoning": "gpt-5-mini-reasoning",
-        "gpt-5-mini-reasoning": "gpt-5-mini-reasoning",
-        "gpt-5.1-reasoning": "gpt-5.1-reasoning",
-        "qwen3-14b": "qwen3:14b",
-        "qwen3-14b-thinking": "qwen3:14b-thinking",
-    }
-    key = aliases.get(key, key)
-
     presets: dict[str, cfg.ModelConfig] = {
         # OpenAI
         "gpt-4.1": cfg.OPENAI_GPT_4_1,
-        "gpt-5.1": cfg.OPENAI_GPT_5_1,
-        "gpt-5.1-reasoning": cfg.OPENAI_GPT_5_1_REASONING,
         "gpt-5-mini": cfg.OPENAI_GPT_5_MINI,
         "gpt-5-mini-reasoning": cfg.OPENAI_GPT_5_MINI_REASONING,
+        "gpt-5.1": cfg.OPENAI_GPT_5_1,
+        "gpt-5.1-reasoning": cfg.OPENAI_GPT_5_1_REASONING,
+        "gpt-5.2": cfg.OPENAI_GPT_5_2,
+        "gpt-5.2-reasoning": cfg.OPENAI_GPT_5_2_REASONING,
         # Ollama / Qwen
         "qwen3:14b": cfg.OLLAMA_QWEN3_14B,
         "qwen3:14b-thinking": cfg.OLLAMA_QWEN3_14B_THINKING,
@@ -64,10 +55,10 @@ def parse_cli_args(argv: Optional[list[str]] = None) -> CliArgs:
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument(
         "--model",
-        default="gpt-5.1-mini-reasoning",
+        default=cfg.DEFAULT_MODEL_PRESET,
         help=(
             "Model preset to use. Examples: "
-            "gpt-4.1, gpt-5.1, gpt-5.1-reasoning, gpt-5-mini, gpt-5-mini-reasoning, "
+            "gpt-4.1, gpt-5.2, gpt-5.2-reasoning, "
             "qwen3:14b, qwen3:14b-thinking"
         ),
     )

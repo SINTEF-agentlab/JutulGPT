@@ -128,13 +128,13 @@ The agent is configured in the `src/jutulgpt/configuration.py` file.
 
 You can select the model at startup with `--model`. The default is:
 
-- `--model gpt-5.1-mini-reasoning` (alias for the `gpt-5-mini-reasoning` preset)
+- `--model gpt-5.2-reasoning` (alias for the `gpt-5.2-reasoning` preset)
 
 Examples:
 
 ```bash
 uv run examples/agent.py --model gpt-4.1
-uv run examples/autonomous_agent.py --model gpt-5.1-reasoning
+uv run examples/autonomous_agent.py --model gpt-5.2-reasoning
 uv run examples/autonomous_agent.py --model qwen3:14b-thinking
 ```
 
