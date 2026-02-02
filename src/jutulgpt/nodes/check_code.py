@@ -218,7 +218,7 @@ def check_code(
     code = fix_imports(code)
 
     # Then shorten the code for faster simulations
-    code = shorter_simulations(code)
+    #code = shorter_simulations(code)
 
     # Running the linter
     linting_message, linting_issues_found = _run_linter(code, print_code=False)
