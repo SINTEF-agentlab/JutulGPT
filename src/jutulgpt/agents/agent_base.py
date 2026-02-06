@@ -27,7 +27,7 @@ from langgraph.utils.runnable import RunnableCallable
 
 import jutulgpt.state as state
 from jutulgpt.cli import colorscheme, show_startup_screen, stream_to_console
-from jutulgpt.configuration import LLM_TEMPERATURE, PROJECT_ROOT, RECURSION_LIMIT
+from jutulgpt.configuration import LLM_TEMPERATURE, RECURSION_LIMIT
 from jutulgpt.globals import console
 from jutulgpt.state import State
 from jutulgpt.utils import get_provider_and_model
@@ -217,7 +217,11 @@ class BaseAgent(ABC):
         """Invoke the model with the given prompt and state."""
         model = self._load_model(config=config)
 
-        workspace_message = f"**Current workspace:** {os.getcwd()} \n**JutulDarcy documentation and examples can be found at:** {str(PROJECT_ROOT / 'rag' / 'jutuldarcy')}"
+        from jutulgpt.rag.package_path import get_package_root
+
+        jd_root = get_package_root()
+        jd_path = str(jd_root) if jd_root else "NOT INSTALLED"
+        workspace_message = f"**Current workspace:** {os.getcwd()} \n**JutulDarcy documentation and examples can be found at:** {jd_path}"
 
         if not messages_list:
             messages_list: List = [

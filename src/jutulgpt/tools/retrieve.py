@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 import jutulgpt.rag.retrieval as retrieval
 import jutulgpt.rag.split_examples as split_examples
 from jutulgpt.cli import colorscheme, print_to_console
-from jutulgpt.configuration import PROJECT_ROOT, BaseConfiguration, cli_mode
+from jutulgpt.configuration import BaseConfiguration, cli_mode
 from jutulgpt.julia import get_function_documentation_from_list_of_funcs
 from jutulgpt.rag.retriever_specs import RETRIEVER_SPECS
 from jutulgpt.utils import get_file_source
@@ -291,7 +291,12 @@ def grep_search(
     isRegexp: Optional[bool] = False,
 ) -> str:
     try:
-        workspace_path = str(PROJECT_ROOT / "rag" / "jutuldarcy")
+        from jutulgpt.rag.package_path import get_package_root
+
+        root = get_package_root()
+        if root is None:
+            return "JutulDarcy is not installed. Install it in Julia with: using Pkg; Pkg.add(\"JutulDarcy\")"
+        workspace_path = str(root)
         cmd_parts = ["grep", "-r", "-n"]
 
         if isRegexp:

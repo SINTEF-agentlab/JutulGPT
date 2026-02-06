@@ -10,7 +10,6 @@ Usage:
 """
 
 import argparse
-import json
 import shutil
 from pathlib import Path
 
@@ -30,6 +29,8 @@ def get_cache_root() -> Path:
 
 def show_status():
     """Show cache status."""
+    from jutulgpt.rag.package_path import get_package_root, get_package_version
+
     cache_root = get_cache_root()
 
     table = Table(title="JutulGPT Cache Status")
@@ -40,7 +41,7 @@ def show_status():
 
     # Check various cache locations
     caches = {
-        "GitHub Downloads": cache_root / "jutuldarcy",
+        "Metadata": cache_root / "jutuldarcy",
         "Vector Stores": cache_root / "retriever_store",
         "Loaded Docs": cache_root / "loaded_store",
         "Function Docs": cache_root / "jutuldarcy_function_docs.pkl",
@@ -68,18 +69,16 @@ def show_status():
     console.print(table)
     console.print(f"\n[bold]Total cache size:[/bold] {total_size / (1024 * 1024):.2f} MB")
 
-    # Show metadata if available
-    metadata_file = cache_root / "jutuldarcy" / "metadata.json"
-    if metadata_file.exists():
-        with open(metadata_file, "r") as f:
-            metadata = json.load(f)
+    # Show package info
+    root = get_package_root()
+    console.print("\n[bold]JutulDarcy Package:[/bold]")
+    if root is not None:
+        version = get_package_version(root)
+        console.print(f"  Package Path: {root}")
+        console.print(f"  Package Version: {version or 'N/A'}")
+    else:
+        console.print("  [yellow]Not installed[/yellow]")
 
-        console.print("\n[bold]JutulDarcy Cache Metadata:[/bold]")
-        console.print(f"  Commit SHA: {metadata.get('commit_sha', 'N/A')[:12]}")
-        console.print(f"  Package Version: {metadata.get('package_version', 'N/A')}")
-        console.print(f"  Branch: {metadata.get('branch', 'N/A')}")
-        console.print(f"  Subdirs: {', '.join(metadata.get('subdirs', []))}")
-    
     # Show function docs info
     func_docs_path = cache_root / "jutuldarcy_function_docs.pkl"
     if func_docs_path.exists():
@@ -113,15 +112,18 @@ def clear_cache():
 
 
 def update_cache():
-    """Force update all caches."""
-    console.print("[cyan]Forcing cache update...[/cyan]")
+    """Force update: clear derived caches, re-resolve package path, and extract function docs."""
+    from jutulgpt.rag.package_path import _clear_derived_caches, get_package_root
 
-    from jutulgpt.rag.github_fetcher import get_jutuldarcy_fetcher
+    console.print("[cyan]Clearing derived caches...[/cyan]")
+    _clear_derived_caches()
 
-    fetcher = get_jutuldarcy_fetcher()
-    paths = fetcher.fetch(subdirs=["docs/src/man", "examples"], force=True, check_updates=False)
-
-    console.print(f"[green]✓ Downloaded {len(paths)} subdirectories[/green]")
+    console.print("[cyan]Resolving JutulDarcy package path...[/cyan]")
+    root = get_package_root()
+    if root is None:
+        console.print("[red]JutulDarcy is not installed. Cannot update.[/red]")
+        return
+    console.print(f"[green]✓ Package root: {root}[/green]")
 
     # Also update function docs
     console.print("[cyan]Extracting function documentation...[/cyan]")
@@ -129,10 +131,9 @@ def update_cache():
 
     docs = extract_jutuldarcy_documentation(force_refresh=True)
     console.print(f"[green]✓ Extracted {len(docs)} function documentations[/green]")
-    
-    # Show where it's saved
-    from jutulgpt.configuration import PROJECT_ROOT
-    cache_path = PROJECT_ROOT.parent / ".cache" / "jutuldarcy_function_docs.pkl"
+
+    cache_root = get_cache_root()
+    cache_path = cache_root / "jutuldarcy_function_docs.pkl"
     console.print(f"[dim]Saved to: {cache_path}[/dim]")
 
 
