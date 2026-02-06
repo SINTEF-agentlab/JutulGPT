@@ -55,15 +55,11 @@ def make_retrieve_tool(
             return "The query is empty."
 
         # Retrieve examples
-        with retrieval.make_retriever(
-            config=config,
+        retriever = retrieval.make_retriever(
             spec=RETRIEVER_SPECS[doc_key]["examples"],
-            retrieval_params=retrieval.RetrievalParams(
-                search_type=configuration.examples_search_type,
-                search_kwargs=configuration.examples_search_kwargs,
-            ),
-        ) as retriever:
-            retrieved_examples = retriever.invoke(query)
+            k=configuration.retrieval_top_k,
+        )
+        retrieved_examples = retriever.invoke(query)
 
         # Human interaction: filter docs/examples
         if configuration.human_interaction.retrieved_examples:

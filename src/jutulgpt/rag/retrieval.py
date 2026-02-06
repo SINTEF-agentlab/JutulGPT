@@ -1,39 +1,8 @@
 import os
-from contextlib import contextmanager
-from typing import Generator, TypedDict
 
-# from langchain.retrievers import ContextualCompressionRetriever
-# from langchain.retrievers.document_compressors import FlashrankRerank
-from langchain_core.embeddings import Embeddings
-from langchain_core.runnables import RunnableConfig
-from langchain_core.vectorstores import VectorStoreRetriever
+from langchain_community.retrievers import BM25Retriever
 
-# from langchain_core.documents import BaseDocumentCompressor
-from jutulgpt.configuration import BaseConfiguration
 from jutulgpt.rag.retriever_specs import RetrieverSpec
-from jutulgpt.utils import get_provider_and_model
-
-
-class RetrievalParams(TypedDict):
-    search_type: str
-    search_kwargs: dict
-
-
-def make_text_encoder(model: str) -> Embeddings:
-    """Connect to the configured text encoder."""
-    provider, model = model.split(":", maxsplit=1)
-    match provider:
-        case "openai":
-            from langchain_openai import OpenAIEmbeddings
-
-            return OpenAIEmbeddings(model=model)
-        case "ollama":
-            from langchain_ollama import OllamaEmbeddings
-
-            return OllamaEmbeddings(model=model)
-
-        case _:
-            raise ValueError(f"Unsupported embedding provider: {provider}")
 
 
 def _load_and_split_docs(spec: RetrieverSpec) -> list:
@@ -83,162 +52,12 @@ def _load_and_split_docs(spec: RetrieverSpec) -> list:
     return chunks
 
 
-@contextmanager
-def make_faiss_retriever(
-    configuration: BaseConfiguration,
-    spec: RetrieverSpec,
-    embedding_model: Embeddings,
-    search_type: str,
-    search_kwargs: dict,
-) -> Generator[VectorStoreRetriever, None, None]:
-    """
-    Create or load a FAISS retriever, saving the index locally to avoid re-indexing.
-    Uses configuration to determine file paths and splitting functions.
-    """
-    import os
-
-    from langchain_community.vectorstores import FAISS
-
-    # Get the persist path by checking what is the specified embedding model
-    persist_path = spec.persist_path(
-        get_provider_and_model(configuration.embedding_model)[0]
-    )
-
-    # Load or create FAISS index
-    if os.path.exists(persist_path):
-        vectorstore = FAISS.load_local(
-            persist_path,
-            embedding_model,
-            allow_dangerous_deserialization=True,
-        )
-    else:
-        print(f"Creating new FAISS index at {spec.persist_path}")
-        docs = _load_and_split_docs(spec)
-        vectorstore = FAISS.from_documents(
-            documents=docs,
-            embedding=embedding_model,
-        )
-        vectorstore.save_local(persist_path)
-
-    yield vectorstore.as_retriever(
-        search_type=search_type,
-        search_kwargs={**search_kwargs},
-    )
-
-
-@contextmanager
-def make_chroma_retriever(
-    configuration: BaseConfiguration,
-    spec: RetrieverSpec,
-    embedding_model: Embeddings,
-    search_type: str,
-    search_kwargs: dict,
-) -> Generator[VectorStoreRetriever, None, None]:
-    """
-    Create or load a FAISS retriever, saving the index locally to avoid re-indexing.
-    Uses configuration to determine file paths and splitting functions.
-    """
-    import os
-
-    from langchain_chroma import Chroma
-
-    # Get the persist path by checking what is the specified embedding model
-    persist_path = spec.persist_path(
-        get_provider_and_model(configuration.embedding_model)[0]
-    )
-
-    # Load or create FAISS index
-    if os.path.exists(persist_path):
-        vectorstore = Chroma(
-            embedding_function=embedding_model,
-            persist_directory=persist_path,
-            collection_name=spec.collection_name,
-        )
-
-    else:
-        print(f"Creating new Chroma index at {persist_path}")
-        docs = _load_and_split_docs(spec)
-
-        vectorstore = Chroma.from_documents(
-            documents=docs,
-            embedding=embedding_model,
-            persist_directory=persist_path,
-            collection_name=spec.collection_name,
-        )
-
-    yield vectorstore.as_retriever(
-        search_type=search_type,
-        search_kwargs={**search_kwargs},
-    )
-
-
-# def apply_flash_reranker(
-#     configuration: BaseConfiguration, retriever: VectorStoreRetriever
-# ):
-#     compressor = FlashrankRerank(**configuration.rerank_kwargs)
-#
-#     return ContextualCompressionRetriever(
-#         base_compressor=compressor, base_retriever=retriever
-#     )
-
-
-@contextmanager
-def make_retriever(
-    config: RunnableConfig,
-    spec: RetrieverSpec,
-    retrieval_params: RetrievalParams = RetrievalParams(
-        search_type="mmr",
-        search_kwargs={"k": 3, "fetch_k": 15, "lambda_mult": 0.5},
-    ),
-) -> Generator[VectorStoreRetriever, None, None]:
-    """
-    Create a retriever for the agent, based on the current configuration.
+def make_retriever(spec: RetrieverSpec, k: int = 3) -> BM25Retriever:
+    """Create a BM25 retriever from the given spec.
 
     Args:
-        config: The runnable configuration
-        spec: The retriever specification
-        **retrieval_overrides: Override any retrieval parameters (search_type, search_kwargs, etc.)
+        spec: The retriever specification defining docs to load.
+        k: Number of documents to retrieve per query.
     """
-    configuration = BaseConfiguration.from_runnable_config(config)
-
-    embedding_model = make_text_encoder(configuration.embedding_model)
-
-    # Get the retriever
-    selected_retriever = None
-    match configuration.retriever_provider:
-        case "faiss":
-            with make_faiss_retriever(
-                configuration,
-                spec,
-                embedding_model,
-                retrieval_params["search_type"],
-                retrieval_params["search_kwargs"],
-            ) as retriever:
-                selected_retriever = retriever
-        case "chroma":
-            with make_chroma_retriever(
-                configuration,
-                spec,
-                embedding_model,
-                retrieval_params["search_type"],
-                retrieval_params["search_kwargs"],
-            ) as retriever:
-                selected_retriever = retriever
-
-        case _:
-            raise ValueError(
-                "Unrecognized retriever_provider in configuration. "
-                f"Expected one of: {', '.join(BaseConfiguration.__annotations__['retriever_provider'].__args__)}\n"
-                f"Got: {configuration.retriever_provider}"
-            )
-
-    # Apply the reranker
-    match configuration.rerank_provider:
-        case "None":
-            yield selected_retriever
-        case _:
-            raise ValueError(
-                "Unrecognized rerank_provider in configuration. "
-                f"Expected one of: {', '.join(BaseConfiguration.__annotations__['rerank_provider'].__args__)}\n"
-                f"Got: {configuration.rerank_provider}"
-            )
+    docs = _load_and_split_docs(spec)
+    return BM25Retriever.from_documents(docs, k=k)

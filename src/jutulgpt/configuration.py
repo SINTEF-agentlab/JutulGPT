@@ -7,7 +7,7 @@ import logging
 import os
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Annotated, Any, Literal, Optional, Type, TypeVar
+from typing import Annotated, Optional, Type, TypeVar
 
 from dotenv import load_dotenv
 from langchain_core.runnables import RunnableConfig, ensure_config
@@ -26,10 +26,6 @@ assert not (cli_mode and mcp_mode), "cli_mode and mcp_mode cannot both be true."
 # Select whether to use local models through Ollama or use OpenAI
 LOCAL_MODELS = False
 LLM_MODEL_NAME = "ollama:qwen3:14b" if LOCAL_MODELS else "openai:gpt-4.1"
-EMBEDDING_MODEL_NAME = (
-    "ollama:nomic-embed-text" if LOCAL_MODELS else "openai:text-embedding-3-small"
-)
-
 RECURSION_LIMIT = 200  # Number of recursions before an error is thrown.
 LLM_TEMPERATURE = 0
 
@@ -47,7 +43,6 @@ _set_env("LANGSMITH_API_KEY")
 
 
 logging.getLogger("httpx").setLevel(logging.WARNING)  # Less warnings in the output
-logging.getLogger("faiss").setLevel(logging.WARNING)
 
 
 class HumanInteraction(BaseModel):
@@ -78,10 +73,10 @@ class HumanInteraction(BaseModel):
 
 @dataclass(kw_only=True)
 class BaseConfiguration:
-    """Configuration class for indexing and retrieval operations.
+    """Configuration class for the agent.
 
-    This class defines the parameters needed for configuring the indexing and
-    retrieval processes, including embedding model selection, retriever provider choice, and search parameters.
+    This class defines the parameters needed for configuring the agent,
+    including retrieval, model selection, and prompts.
     """
 
     # Human in the loop
@@ -94,54 +89,9 @@ class BaseConfiguration:
     )
 
     # RAG
-    embedding_model: Annotated[
-        str,
-        {"__template_metadata__": {"kind": "embeddings"}},
-    ] = field(
-        default_factory=lambda: EMBEDDING_MODEL_NAME,
-        metadata={
-            "description": "Name of the embedding model to use. Must be a valid embedding model name."
-        },
-    )
-
-    retriever_provider: Annotated[
-        Literal["faiss", "chroma"],
-        {"__template_metadata__": {"kind": "retriever"}},
-    ] = field(
-        default="chroma",
-        metadata={"description": "The vector store provider to use for retrieval."},
-    )
-
-    examples_search_type: Annotated[
-        Literal["similarity", "mmr", "similarity_score_threshold"],
-        {"__template_metadata__": {"kind": "reranker"}},
-    ] = field(
-        default="mmr",
-        metadata={
-            "description": "Defines the type of search that the retriever should perform."
-        },
-    )
-
-    examples_search_kwargs: dict[str, Any] = field(
-        default_factory=lambda: {"k": 2, "fetch_k": 10, "lambda_mult": 0.5},
-        metadata={
-            "description": "Additional keyword arguments to pass to the search function of the retriever. See langgraph documentation for details about what kwargs works for the different search types. See https://python.langchain.com/api_reference/chroma/vectorstores/langchain_chroma.vectorstores.Chroma.html#langchain_chroma.vectorstores.Chroma.as_retriever"
-        },
-    )
-
-    rerank_provider: Annotated[
-        Literal["None", "flash"],
-        {"__template_metadata__": {"kind": "reranker"}},
-    ] = field(
-        default="None",
-        metadata={
-            "description": "The provider user for reranking the retrieved documents."
-        },
-    )
-
-    rerank_kwargs: dict[str, Any] = field(
-        default_factory=lambda: {},
-        metadata={"description": "Keyword arguments provided to the reranker"},
+    retrieval_top_k: int = field(
+        default=3,
+        metadata={"description": "Number of documents to retrieve per query."},
     )
 
     # Models
