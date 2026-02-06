@@ -200,7 +200,13 @@ class GrepSearchInput(BaseModel):
         description="The keyword based pattern to search for in files. Can be a regex or plain text pattern"
     )
     includePattern: Optional[str] = Field(
-        default=None, description="Search files matching this glob pattern."
+        default=None,
+        description=(
+            "File pattern to search (e.g. '*.jl' or '*.md'). "
+            "Defaults to '*.jl' and '*.md'. "
+            "Note: Use simple patterns like '*.jl', not glob patterns like '**/*.jl' - "
+            "the search is already recursive."
+        ),
     )
     isRegexp: Optional[bool] = Field(
         default=False, description="Whether the pattern is a regex."
@@ -209,7 +215,12 @@ class GrepSearchInput(BaseModel):
 
 @tool(
     "grep_search",
-    description="Do a keyword based search in the JutulDarcy documentation. Limited to 20 results. Use this tool to get an overview of which files to consider reading using the file-reader tool.",
+    description=(
+        "Search for keywords in JutulDarcy documentation and examples. "
+        "Searches recursively through all files. Limited to first 20 matches. "
+        "Returns file paths and line numbers with matching content. "
+        "Use this to discover which files contain relevant code before reading them with the file-reader tool."
+    ),
     args_schema=GrepSearchInput,
 )
 def grep_search(
@@ -242,7 +253,7 @@ def grep_search(
 
         if result.stdout:
             lines = result.stdout.strip().split("\n")[:20]  # Limit to 20 results
-            match_results = []
+            match_results = []  # Full details for agent
             file_counts: dict[str, int] = {}
             for match in lines:
                 # Parse: filename:line_number:content
@@ -254,11 +265,50 @@ def grep_search(
                 match_results.append(f"File: {filename}, Line {line_str}: {content}")
                 file_counts[filename] = file_counts.get(filename, 0) + 1
 
-            # Summary for CLI and log
-            file_list = "\n".join(f"- {f} ({c} matches)" for f, c in file_counts.items())
-            summary = f"Found {len(match_results)} matches in {len(file_counts)} files:\n{file_list}"
+            # Build file list with relative paths
+            file_list = []
+            for filepath, count in file_counts.items():
+                rel_path = filepath.replace(str(workspace_path) + "/", "")
+                match_text = "match" if count == 1 else "matches"
+                file_list.append(f"- {rel_path} ({count} {match_text})")
+
+            match_word = "match" if len(match_results) == 1 else "matches"
+            file_word = "file" if len(file_counts) == 1 else "files"
+
+            # Terminal: Show first 3 files only
+            if len(file_list) > 3:
+                terminal_output = f"First 3 of {len(file_counts)} {file_word} ({len(match_results)} {match_word} total):\n"
+                terminal_output += "\n".join(file_list[:3])
+                terminal_output += f"\n+ {len(file_list) - 3} more {file_word}"
+            else:
+                terminal_output = f"{len(match_results)} {match_word} in {len(file_counts)} {file_word}:\n" + "\n".join(file_list)
+
             print_to_console(
-                text=summary,
+                text=terminal_output,
+                title=f"Grep search: {query}",
+                border_style=colorscheme.message,
+            )
+
+            # Log: Show all files
+            log_output = f"Found {len(match_results)} {match_word} in {len(file_counts)} {file_word}:\n" + "\n".join(file_list)
+
+            logger = get_session_logger()
+            if logger:
+                logger.log(
+                    ToolEntry(
+                        content=log_output,
+                        title=f"Grep search: {query}",
+                        tool_name="grep_search",
+                        args={"query": query, "includePattern": includePattern},
+                    )
+                )
+
+            # Return full details to agent
+            return f"Found {len(match_results)} {match_word}:\n" + "\n\n".join(match_results)
+        else:
+            no_match_msg = f"No matches found for: {query}"
+            print_to_console(
+                text=no_match_msg,
                 title=f"Grep search: {query}",
                 border_style=colorscheme.message,
             )
@@ -266,19 +316,30 @@ def grep_search(
             if logger:
                 logger.log(
                     ToolEntry(
-                        content=summary,
+                        content=no_match_msg,
                         title=f"Grep search: {query}",
                         tool_name="grep_search",
                         args={"query": query, "includePattern": includePattern},
                     )
                 )
-
-            out_text = f"Found {len(match_results)} matches:\n" + "\n\n".join(
-                match_results
-            )
-            return out_text
-        else:
-            return f"No matches found for: {query}"
+            return no_match_msg
 
     except Exception as e:
-        return f"Error during text search: {str(e)}"
+        error_msg = f"Error during text search: {str(e)}"
+        print_to_console(
+            text=error_msg,
+            title=f"Grep search error: {query}",
+            border_style=colorscheme.error,
+        )
+        logger = get_session_logger()
+        if logger:
+            logger.log(
+                ToolEntry(
+                    content=error_msg,
+                    title=f"Grep search error: {query}",
+                    tool_name="grep_search",
+                    args={"query": query, "includePattern": includePattern},
+                    error=str(e),
+                )
+            )
+        return error_msg
