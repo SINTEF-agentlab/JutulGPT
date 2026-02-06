@@ -1,0 +1,13 @@
+[models]
+llm = "openai:gpt-4.1"
+temperature = 0
+
+[retrieval]
+top_k = 3
+
+[mode]
+cli = true
+mcp = false
+
+[agent]
+recursion_limit = 200

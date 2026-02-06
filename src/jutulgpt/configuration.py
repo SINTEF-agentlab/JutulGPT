@@ -2,47 +2,63 @@
 
 from __future__ import annotations
 
-import getpass
 import logging
 import os
+import tomllib
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Annotated, Optional, Type, TypeVar
 
-from dotenv import load_dotenv
 from langchain_core.runnables import RunnableConfig, ensure_config
 from pydantic import BaseModel, ConfigDict
 
 from jutulgpt import prompts
 
+# Load configuration from TOML file.
+PROJECT_ROOT = Path(__file__).resolve().parent
+_TOML_PATH = PROJECT_ROOT.parent.parent / "jutulgpt.toml"
+
+
+def _load_toml() -> dict:
+    if _TOML_PATH.exists():
+        with open(_TOML_PATH, "rb") as f:
+            return tomllib.load(f)
+    return {}
+
+
+_toml = _load_toml()
+
 # Static settings.
-# NOTE: Currently only one of these can be true at a time
-cli_mode: bool = True  # If the agent is run from using the CLI
-mcp_mode: bool = (
-    False  # If the agent is run as an MPC server that can be called from VSCode
-)
+cli_mode: bool = _toml.get("mode", {}).get("cli", True)
+mcp_mode: bool = _toml.get("mode", {}).get("mcp", False)
 assert not (cli_mode and mcp_mode), "cli_mode and mcp_mode cannot both be true."
 
-# Select whether to use local models through Ollama or use OpenAI
-LOCAL_MODELS = False
-LLM_MODEL_NAME = "ollama:qwen3:14b" if LOCAL_MODELS else "openai:gpt-4.1"
-RECURSION_LIMIT = 200  # Number of recursions before an error is thrown.
-LLM_TEMPERATURE = 0
+_DEFAULT_LLM: str = _toml.get("models", {}).get("llm", "openai:gpt-4.1")
+LLM_TEMPERATURE: int = _toml.get("models", {}).get("temperature", 0)
+RECURSION_LIMIT: int = _toml.get("agent", {}).get("recursion_limit", 200)
 
 
-# Setup of the environment and some logging. Not neccessary to touch this.
-def _set_env(var: str):
-    if not os.environ.get(var):
-        os.environ[var] = getpass.getpass(f"{var}: ")
+# Side-effect initialization (env vars, logging) — call explicitly before first API use.
+_initialized = False
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent
-load_dotenv()
-_set_env("OPENAI_API_KEY")
-_set_env("LANGSMITH_API_KEY")
+def init():
+    """Initialize environment: load .env, set API keys, configure logging."""
+    global _initialized
+    if _initialized:
+        return
+    _initialized = True
 
+    import getpass
 
-logging.getLogger("httpx").setLevel(logging.WARNING)  # Less warnings in the output
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    for var in ("OPENAI_API_KEY", "LANGSMITH_API_KEY"):
+        if not os.environ.get(var):
+            os.environ[var] = getpass.getpass(f"{var}: ")
+
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 class HumanInteraction(BaseModel):
@@ -90,19 +106,19 @@ class BaseConfiguration:
 
     # RAG
     retrieval_top_k: int = field(
-        default=3,
+        default_factory=lambda: _toml.get("retrieval", {}).get("top_k", 3),
         metadata={"description": "Number of documents to retrieve per query."},
     )
 
     # Models
     agent_model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
-        default_factory=lambda: LLM_MODEL_NAME,
+        default_factory=lambda: _DEFAULT_LLM,
         metadata={"description": "The language model used for coding tasks."},
     )
     autonomous_agent_model: Annotated[
         str, {"__template_metadata__": {"kind": "llm"}}
     ] = field(
-        default_factory=lambda: LLM_MODEL_NAME,
+        default_factory=lambda: _DEFAULT_LLM,
         metadata={"description": "The language model used for coding tasks."},
     )
 

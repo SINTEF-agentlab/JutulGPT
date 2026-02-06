@@ -413,6 +413,10 @@ Here is the question asked by the other agent:
 
     def run(self) -> None:
         """Run the agent."""
+        from jutulgpt.configuration import init
+
+        init()
+
         if self.part_of_multi_agent:
             raise ValueError("Cannot run standalone mode when part_of_multi_agent=True")
 
