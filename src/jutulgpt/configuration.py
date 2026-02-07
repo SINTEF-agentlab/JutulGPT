@@ -61,26 +61,29 @@ def init():
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
+_hi = _toml.get("human_interaction", {})
+
+
 class HumanInteraction(BaseModel):
     model_config = ConfigDict(extra="forbid")  # optional strictness
     rag_query: bool = field(
-        default=False,
+        default=_hi.get("rag_query", False),
         metadata={"description": "Whether to modify the generated RAG query."},
     )
     retrieved_examples: bool = field(
-        default=False,
+        default=_hi.get("retrieved_examples", False),
         metadata={
             "description": "Whether to verify and filter the retrieved examples."
         },
     )
     code_check: bool = field(
-        default=True,
+        default=_hi.get("code_check", True),
         metadata={
             "description": "Whether to perform code checks on the generated code."
         },
     )
     fix_error: bool = field(
-        default=True,
+        default=_hi.get("fix_error", True),
         metadata={
             "description": "Whether to decide to try to fix errors in the generated code."
         },

@@ -4,10 +4,17 @@ temperature = 0
 
 [retrieval]
 top_k = 3
+# package_path = "/path/to/JutulDarcy" # Optional: set manually to avoid Julia startup
 
 [mode]
 cli = true
 mcp = false
+
+[human_interaction]
+rag_query = false
+retrieved_examples = false
+code_check = true
+fix_error = true
 
 [agent]
 recursion_limit = 200
