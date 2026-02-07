@@ -1,4 +1,5 @@
 # # Validation of equation-of-state compositional flow
+# <tags: Compositional, Validation>
 # This example solves a 1D two-phase, three component miscible displacement
 # problem and compares against existing simulators (E300, AD-GPRS) to verify
 # correctness.
@@ -92,8 +93,8 @@ end
 # report step that was plotted in the previous section.
 import Statistics: mean
 import JutulDarcy: reservoir_sensitivities
-function objective_function(model, state, Δt, step_i, forces)
-    if step_i != step_to_plot
+function objective_function(model, state, Δt, step_info, forces)
+    if step_info[:step] != step_to_plot
         return 0.0
     end
     sg = @view state.Reservoir.Saturations[2, :]

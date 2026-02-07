@@ -24,7 +24,7 @@ from jutulgpt.tools import (
     run_julia_linter,
     write_to_file,
 )
-from jutulgpt.utils import get_code_from_response
+from jutulgpt.utils import get_code_from_response, get_message_text
 
 
 class AutonomousAgent(BaseAgent):
@@ -118,22 +118,24 @@ class AutonomousAgent(BaseAgent):
 
         # Check if we need more steps
         if self._are_more_steps_needed(state, response):
-            return {
-                "messages": [
-                    AIMessage(
-                        id=response.id,
-                        content="Sorry, need more steps to process this request.",
-                    )
-                ]
-            }
+            fallback = AIMessage(
+                id=response.id,
+                content="Sorry, need more steps to process this request.",
+            )
+            return {"messages": self._finalize_context(fallback)}
 
-        code_block = get_code_from_response(response=response.content)
+        # With OpenAI Responses API, response.content may be a list of content blocks.
+        # Always use the normalized text view for downstream parsing.
+        response_text = get_message_text(response)
+        code_block = get_code_from_response(response=response_text)
 
+        # Finalize context: bundle response with any pending state changes
+        messages = self._finalize_context(response)
         return {
-            "messages": [response],
+            "messages": messages,
             "code_block": code_block,
             "error": False,
-            "mcp_answer": response.content,
+            "mcp_answer": response_text,
         }
 
 

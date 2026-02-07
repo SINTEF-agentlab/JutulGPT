@@ -1,4 +1,5 @@
 # # Geothermal doublet
+# <tags: Geothermal, Introduction>
 # This example demonstrates how to set up a geothermal doublet simulation using
 # JutulDarcy. We will use two different PVT functions--one simple and one
 # realistic--to highlight the importance of accurate fluid physics in geothermal
@@ -24,7 +25,7 @@ function setup_doublet(sys)
     inj_well = setup_vertical_well(domain, 45, 15, name = :Injector, simple_well = false)
     prod_well = setup_vertical_well(domain, 15, 45, name = :Producer, simple_well = false)
 
-    model, _ = setup_reservoir_model(
+    model = setup_reservoir_model(
         domain, sys,
         thermal = true,
         wells = [inj_well, prod_well],
@@ -81,7 +82,7 @@ plot_reservoir(case_real.model, results_real.states)
 # A key performace metric for geothermal doublets is the time it takes before
 # the cold water injected to uphold pressure reaches the producer. At this
 # point, production temperature will rapidly decline, so that the breakthrough
-# time effectivelt defines the lifespan of the doublet. We plot the well results
+# time effectively defines the lifespan of the doublet. We plot the well results
 # for the two simulations to compare the two different PVT formulations. Since
 # water viscosty is not affected by temperature in the simple PVT model, water
 # movement is much faster in this scenario, thereby grossly underestimating the

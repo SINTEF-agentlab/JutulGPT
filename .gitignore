@@ -17,6 +17,9 @@ src/ui/pnpm-lock.yaml
 # Julia-specific
 Manifest.toml
 
+# output
+output/
+
 # The presentation
 presentation/*
 !presentation/main.tex

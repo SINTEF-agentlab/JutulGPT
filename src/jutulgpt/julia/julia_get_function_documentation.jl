@@ -247,11 +247,11 @@ function get_docs_for_functions(code_string::String)
             # Add func_name to the list of func_names_with_doc
             push!(func_names_with_doc, func_name)
             # Format the output
-            output *= "\n# Documentation for '$func_name':\n"
+            output *= "\n### Documentation for '$func_name':\n"
             # If doc is a string, apply regex replacement and remove leading whitespace
             if isa(doc, String)
-                # Replace every # at the start of a line with ##
-                doc = replace(doc, r"^#"m => "##")
+                # Replace every # at the start of a line with #### (keep hierarchy subordinate)
+                doc = replace(doc, r"^#"m => "####")
                 # Remove leading whitespace from all lines
                 doc = remove_leading_whitespace(doc)
             end

@@ -12,6 +12,8 @@ from langchain_core.language_models.base import LanguageModelInput
 from langchain_core.messages import BaseMessage, trim_messages
 from langchain_core.runnables import Runnable
 
+from jutulgpt import configuration as cfg
+from jutulgpt.configuration import ModelConfig
 from jutulgpt.state import CodeBlock, State
 
 
@@ -96,47 +98,41 @@ def load_chat_model(fully_specified_name: str) -> BaseChatModel:
     """Load a chat model from a fully specified name.
 
     Args:
-        fully_specified_name (str): String in the format 'provider/model'.
+        fully_specified_name (str): String in the format 'provider:model'.
     """
     provider, model = get_provider_and_model(fully_specified_name)
-    match provider:
-        case "openai":
-            try:
-                return init_chat_model(
-                    model,
-                    model_provider=provider,
-                    temperature=0.1,
-                )
-            except Exception as e:
-                raise ValueError(
-                    f"Failed to load OpenAI model '{model}': {e}. "
-                    "Ensure the model name is correct and that the OpenAI API key is set in the environmen."
-                )
+    # Prefer the active preset when it matches the requested provider/model.
+    # Otherwise, fall back to a minimal config for that provider/model.
+    active_cfg = cfg.ACTIVE_MODEL_CONFIG
+    if active_cfg.provider == provider and active_cfg.model == model:
+        model_cfg = active_cfg
+    else:
+        model_cfg = ModelConfig(
+            provider=provider,  # type: ignore[arg-type]
+            model=model,
+        )
 
-        case "ollama":
-            # Resoning models need reasoning=True to hide the thinking, but this fails for non-reasoning models.
-            try:
-                if model == "qwen3:14b":  # WARNING: This is VERY bad practice!
-                    return init_chat_model(
-                        model,
-                        model_provider=provider,
-                        temperature=0.1,
-                        reasoning=True,
-                    )
-                else:
-                    return init_chat_model(
-                        model,
-                        model_provider=provider,
-                        temperature=0.1,
-                    )
-            except Exception as e:
-                raise ValueError(
-                    f"Failed to load Ollama model '{model}': {e}. "
-                    "Ensure the model is available and that Ollama is installed."
-                )
+    try:
+        return init_chat_model(
+            model_cfg.model,
+            model_provider=model_cfg.provider,
+            streaming=True,
+            **model_cfg.llm_kwargs,
+        )
+    except Exception as e:
+        hint = ""
+        msg = str(e)
+        if provider == "ollama":
+            # Common Ollama failure mode: model not pulled locally.
+            if "not found" in msg and "pull" in msg:
+                hint = f" If using Ollama, try: `ollama pull {model}`."
 
-        case _:
-            raise ValueError(f"Unsupported chat model provider: {provider}")
+        raise ValueError(
+            f"Failed to load chat model '{provider}:{model}': {e}. "
+            "Ensure the model name is correct, credentials are set (if required), "
+            "and the provider runtime is available."
+            + hint
+        ) from e
 
 
 def get_tool_message(messages: List, n_last=2, print=False):
@@ -247,6 +243,8 @@ def _get_code_string_from_response(response: str) -> str:
     Returns:
         str: The extracted Julia code (joined if multiple blocks), or an empty string if not found.
     """
+    if not response:
+        return ""
     matches = re.findall(r"```julia\s*([\s\S]*?)```", response, re.IGNORECASE)
     if matches:
         # Join multiple code blocks with double newlines to separate them
@@ -269,7 +267,9 @@ def get_code_from_response(
         CodeBlock: An object containing separated imports and code.
     """
     code_str = (
-        _get_code_string_from_response(response) if within_julia_context else response
+        _get_code_string_from_response(response)
+        if within_julia_context
+        else response
     )
 
     if not code_str:
@@ -302,8 +302,9 @@ def get_last_code_response(state: State) -> CodeBlock:
 
     # Include the human in case the human-in-the-loop updates the generated code.
 
+    # Always use normalized string view of messages for parsing.
     if last_message.type == "ai" or last_message.type == "human":
-        last_message_content = last_message.content
+        last_message_content = get_message_text(last_message)
     else:
         last_message_content = ""
     code_block = get_code_from_response(last_message_content)

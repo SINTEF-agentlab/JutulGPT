@@ -10,6 +10,7 @@ from langchain_core.messages import (
     AIMessage,
     BaseMessage,
     HumanMessage,
+    RemoveMessage,
     SystemMessage,
     ToolMessage,
     trim_messages,
@@ -26,11 +27,24 @@ from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.utils.runnable import RunnableCallable
 
 import jutulgpt.state as state
-from jutulgpt.cli import colorscheme, show_startup_screen, stream_to_console
-from jutulgpt.configuration import LLM_TEMPERATURE, PROJECT_ROOT, RECURSION_LIMIT
+from jutulgpt.cli import (
+    colorscheme,
+    show_startup_screen,
+    stream_to_console,
+)
+from jutulgpt.configuration import (
+    BaseConfiguration,
+    CONTEXT_TRIM_THRESHOLD,
+    PROJECT_ROOT,
+    RECENT_MESSAGES_TO_KEEP,
+    RECURSION_LIMIT,
+    cli_mode,
+)
+from jutulgpt.context import ContextTracker, summarize_conversation
 from jutulgpt.globals import console
+from jutulgpt.logging import SessionLogger, set_session_logger
 from jutulgpt.state import State
-from jutulgpt.utils import get_provider_and_model
+from jutulgpt.utils import get_message_text, get_provider_and_model, load_chat_model
 
 
 class BaseAgent(ABC):
@@ -58,6 +72,10 @@ class BaseAgent(ABC):
         self.printed_name = printed_name if printed_name else name
         self.state_schema = state.State
         self.print_chat_output = print_chat_output
+        self._logger: Optional[SessionLogger] = None
+        self._context_tracker: Optional[ContextTracker] = None
+        self._conversation_summary: str = ""  # Summary of the conversation if summarization has happened
+        self._messages_to_remove: List[RemoveMessage] = []  # Messages to delete from state
 
         # Process tools
         if isinstance(tools, ToolNode):
@@ -78,6 +96,49 @@ class BaseAgent(ABC):
 
         # WARNING: This requires connection to internet. Therefore it is currently commented out.
         # self.generate_graph_visualization()
+
+    @staticmethod
+    def _ensure_string_content(msg: BaseMessage) -> BaseMessage:
+        """Return a message with `content` converted to a plain string.
+
+        Some providers (notably OpenAI Responses) may return structured blocks in
+        `message.content`. This breaks downstream token counting / trimming which
+        expects a string. We store only the plain-text view in state/history.
+        """
+        if not hasattr(msg, "content") or isinstance(getattr(msg, "content"), str):
+            return msg
+
+        text = get_message_text(msg)
+
+        # Pydantic v2 (LangChain >=0.3): immutable copy
+        try:
+            return msg.model_copy(update={"content": text})  # type: ignore[attr-defined]
+        except Exception:
+            # Fallback: in-place assignment (best effort)
+            try:
+                msg.content = text  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            return msg
+
+    def _apply_cli_model_selection(self) -> bool:
+        """Apply `--model` preset selection for CLI runs.
+
+        Returns False if argparse handled `-h/--help` (i.e. should exit).
+        """
+        if not cli_mode:
+            return True
+
+        from jutulgpt.cli.model_cli import apply_model_from_cli, parse_cli_args
+
+        try:
+            args = parse_cli_args()
+        except SystemExit:
+            # argparse handled -h/--help
+            return False
+
+        apply_model_from_cli(args.model)
+        return True
 
     @abstractmethod
     def get_prompt_from_config(self, config: RunnableConfig) -> str:
@@ -147,31 +208,7 @@ class BaseAgent(ABC):
     def _get_chat_model(self, model: Union[str, LanguageModelLike]) -> BaseChatModel:
         """Setup and bind tools to the model."""
         if isinstance(model, str):
-            try:
-                from langchain.chat_models import init_chat_model
-            except ImportError:
-                raise ImportError("Please install langchain to use string model names")
-
-            provider, model_name = get_provider_and_model(model)
-
-            if (
-                provider == "ollama" and model_name == "qwen3:14b"
-            ):  # WARNING: This is bad practice!
-                chat_model = init_chat_model(
-                    model_name,
-                    model_provider=provider,
-                    temperature=LLM_TEMPERATURE,
-                    reasoning=True,
-                    streaming=True,
-                )
-            else:
-                chat_model = init_chat_model(
-                    model_name,
-                    model_provider=provider,
-                    temperature=LLM_TEMPERATURE,
-                    streaming=True,
-                )
-            model = cast(BaseChatModel, chat_model)
+            model = cast(BaseChatModel, load_chat_model(model))
 
         # Get the underlying model
         if isinstance(model, RunnableSequence):
@@ -215,17 +252,32 @@ class BaseAgent(ABC):
         messages_list: Optional[List] = None,
     ) -> AIMessage:
         """Invoke the model with the given prompt and state."""
-        model = self._load_model(config=config)
+        # Fallback logger init for non-CLI modes (e.g., MCP)
+        if self._logger is None:
+            configuration = BaseConfiguration.from_runnable_config(config=config)
+            self._logger = SessionLogger.from_config(configuration)
+            set_session_logger(self._logger)
 
+        model = self._load_model(config=config)
+        configuration = BaseConfiguration.from_runnable_config(config=config)
+
+        system_prompt = self.get_prompt_from_config(config=config)
         workspace_message = f"**Current workspace:** {os.getcwd()} \n**JutulDarcy documentation and examples can be found at:** {str(PROJECT_ROOT / 'rag' / 'jutuldarcy')}"
 
+        # Initialize context tracker
+        if self._context_tracker is None:
+            self._context_tracker = ContextTracker(
+                system_prompt=system_prompt + workspace_message,
+                tool_definitions=self.tool_classes,
+                model=model,
+                max_tokens=configuration.context_window_size,
+            )
+
         if not messages_list:
-            messages_list: List = [
-                SystemMessage(content=self.get_prompt_from_config(config=config)),
-                SystemMessage(content=workspace_message),
-            ]
-            trimmed_state_messages = self._trim_state_messages(state.messages, model)
-            messages_list.extend(trimmed_state_messages)
+            # Prepare context (builds messages, summarizes if needed)
+            messages_list = self._prepare_context(
+                system_prompt, workspace_message, state.messages, model, config
+            )
 
         # Invoke the model
         if self.print_chat_output:
@@ -235,11 +287,21 @@ class BaseAgent(ABC):
                 config=config,
                 title=self.printed_name,
                 border_style=colorscheme.normal,
+                logger=self._logger,
             )
 
             response = cast(AIMessage, chat_response)
         else:
             response = cast(AIMessage, model.invoke(messages_list, config))
+            # Log non-streamed responses
+            if self._logger and self._logger.enabled:
+                # response.content can be str or list, convert to str for logging
+                content = response.content if isinstance(response.content, str) else str(response.content)
+                self._logger.log_assistant(
+                    content=content if content else "",
+                    title=self.printed_name or "Assistant",
+                    tool_calls=getattr(response, "tool_calls", None),
+                )
 
         # Add agent name to the response
         response.name = self.name
@@ -332,20 +394,110 @@ class BaseAgent(ABC):
             or (remaining_steps is not None and remaining_steps < 2 and has_tool_calls)
         )
 
-    def _trim_state_messages(
+    def _prepare_context(
         self,
-        messages: Sequence[BaseMessage],
+        system_prompt: str,
+        workspace_message: str,
+        state_messages: Sequence[BaseMessage],
         model: Union[BaseChatModel, Runnable[LanguageModelInput, BaseMessage]],
-    ) -> Sequence[BaseMessage]:
-        trimmed_state_messages = trim_messages(
-            messages,
-            max_tokens=40000,  # adjust for model's context window minus system & files message
+        config: RunnableConfig,
+    ) -> List[BaseMessage]:
+        """Prepare context for model invocation.
+
+        Builds message list, compresses old messages if context is too high,
+        and returns the final message list for the model.
+        """
+        configuration = BaseConfiguration.from_runnable_config(config=config)
+        all_messages = [self._ensure_string_content(m) for m in state_messages]
+        summarization_happened = False
+
+        # Compress old messages if context usage exceeds threshold
+        if self._context_tracker:
+            usage = self._context_tracker.update(all_messages)
+
+            if usage.usage_fraction >= configuration.context_summarize_threshold:
+                cutoff = self._find_compression_cutoff(all_messages)
+
+                if cutoff > 0:
+                    summary = summarize_conversation(
+                        all_messages[:cutoff],
+                        model,
+                        config,
+                        previous_summary=self._conversation_summary,
+                    )
+                    if summary:
+                        self._conversation_summary = summary
+                        summarization_happened = True
+
+                        # Mark old messages for removal from LangGraph state
+                        self._messages_to_remove = [
+                            RemoveMessage(id=msg.id)
+                            for msg in all_messages[:cutoff]
+                            if msg.id is not None
+                        ]
+
+                        # Log compression
+                        log_msg = f"⚡ Context at {usage.usage_percent:.0f}% - compressed {cutoff} messages."
+                        console.print(f"[yellow]{log_msg}[/yellow]")
+                        if self._logger and self._logger.enabled:
+                            self._logger._write_raw(f"**{log_msg}**\n\n---\n\n")
+
+                        all_messages = all_messages[cutoff:]
+
+        # Combine all system content into one SystemMessage because
+        # trim_messages with include_system=True only preserves the first SystemMessage
+        system_parts = [system_prompt, workspace_message]
+
+        if self._conversation_summary:
+            system_parts.append(f"## Previous conversation summary:\n{self._conversation_summary}")
+
+        if summarization_happened:
+            system_parts.append("[Context was just summarized. The following messages contain your latest work. Continue with your current task.]")
+
+        combined_system_content = "\n\n".join(system_parts)
+        messages_list: List[BaseMessage] = [
+            SystemMessage(content=combined_system_content),
+        ]
+
+        messages_list.extend(all_messages)
+
+        # Update tracker with final list
+        if self._context_tracker:
+            self._context_tracker.update(messages_list, summary=self._conversation_summary)
+
+        # Trim as safety net (in case summarization didn't compress enough)
+        trim_limit = int(configuration.context_window_size * CONTEXT_TRIM_THRESHOLD)
+        final_messages = list(trim_messages(
+            messages_list,
+            max_tokens=trim_limit,
             strategy="last",
             token_counter=model,
-            include_system=False,  # Not needed since systemMessage is added separately
-            allow_partial=True,
-        )
-        return trimmed_state_messages
+            include_system=True,
+            start_on="human",
+            end_on=("human", "tool"),
+            allow_partial=False,
+        ))
+
+        return final_messages
+
+    def _find_compression_cutoff(self, messages: List[BaseMessage]) -> int:
+        """Find cutoff for compression, preserving recent messages and tool call boundaries."""
+        cutoff = len(messages) - RECENT_MESSAGES_TO_KEEP
+
+        # Don't compress past the last HumanMessage
+        for i in range(len(messages) - 1, -1, -1):
+            if isinstance(messages[i], HumanMessage):
+                cutoff = min(cutoff, i)
+                break
+
+        # Don't cut after AIMessage with tool_calls (would orphan the ToolMessages)
+        while cutoff > 0 and isinstance(messages[cutoff - 1], AIMessage):
+            if getattr(messages[cutoff - 1], "tool_calls", None):
+                cutoff -= 1
+            else:
+                break
+
+        return max(0, cutoff)
 
     def should_continue(self, state: state.State) -> Literal["tools", "continue"]:
         """
@@ -360,13 +512,45 @@ class BaseAgent(ABC):
         else:
             return "continue"
 
+    def _finalize_context(self, response: AIMessage) -> List[BaseMessage]:
+        """Finalize context after model call, bundling response with pending state changes.
+
+        Pairs with _prepare_context. Subclasses should use this when overriding
+        call_model to ensure RemoveMessage objects from compression are included.
+        """
+        updates: List[BaseMessage] = []
+        if self._messages_to_remove:
+            updates.extend(self._messages_to_remove)
+            self._messages_to_remove = []
+
+        # Store a plain-text version of the assistant message in state to avoid
+        # carrying provider-specific structured blocks into later token counting.
+        response = cast(AIMessage, self._ensure_string_content(response))
+
+        updates.append(response)
+        return updates
+
     def call_model(self, state: state.State, config: RunnableConfig) -> dict:
         """Call the model with the current state."""
         response = self.invoke_model(state=state, config=config)
-        return {"messages": [response]}
+
+        # Finalize context: bundle response with any pending state changes
+        messages = self._finalize_context(response)
+        return {"messages": messages}
 
     def get_user_input(self, state: state.State, config: RunnableConfig) -> dict:
         """Get user input for standalone mode."""
+        configuration = BaseConfiguration.from_runnable_config(config=config)
+
+        # Update and display context usage before user input
+        if self._context_tracker:
+            # Re-count with current state (includes model's latest response)
+            self._context_tracker.update(list(state.messages), summary=self._conversation_summary)
+            self._context_tracker.display(
+                logger=self._logger,
+                show_console=configuration.show_context_usage,
+                console_threshold=configuration.context_display_threshold,
+            )
 
         user_input = ""
         while not user_input:  # Handle empty input
@@ -377,6 +561,10 @@ class BaseAgent(ABC):
         if user_input.strip().lower() in ["q", "quit"]:
             console.print("[bold red]Goodbye![/bold red]")
             exit(0)
+
+        # Log user input
+        if self._logger and self._logger.enabled:
+            self._logger.log_user(content=user_input, title="User")
 
         return {
             "messages": [HumanMessage(content=user_input)],
@@ -413,10 +601,19 @@ Here is the question asked by the other agent:
             raise ValueError("Cannot run standalone mode when part_of_multi_agent=True")
 
         try:
+            # CLI model selection (before config/logger initialization)
+            if not self._apply_cli_model_selection():
+                return
+
             show_startup_screen()
 
             # Create configuration
             config = RunnableConfig(configurable={}, recursion_limit=RECURSION_LIMIT)
+            configuration = BaseConfiguration.from_runnable_config(config=config)
+
+            # Initialize session logger once at startup
+            self._logger = SessionLogger.from_config(configuration)
+            set_session_logger(self._logger)
 
             # Create initial state conforming to the state schema
             initial_state = {

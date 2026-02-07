@@ -12,8 +12,13 @@ from pydantic import BaseModel, Field
 import jutulgpt.rag.retrieval as retrieval
 import jutulgpt.rag.split_examples as split_examples
 from jutulgpt.cli import colorscheme, print_to_console
-from jutulgpt.configuration import PROJECT_ROOT, BaseConfiguration, cli_mode
+from jutulgpt.configuration import (
+    PROJECT_ROOT,
+    BaseConfiguration,
+    cli_mode,
+)
 from jutulgpt.julia import get_function_documentation_from_list_of_funcs
+from jutulgpt.logging import RAGEntry, ToolEntry, get_session_logger
 from jutulgpt.rag.retriever_specs import RETRIEVER_SPECS
 from jutulgpt.utils import get_file_source
 
@@ -44,13 +49,6 @@ def make_retrieve_tool(
                 from jutulgpt.human_in_the_loop.ui import modify_rag_query
 
                 query = modify_rag_query(query, doc_label)
-        else:
-            print_to_console(
-                text=f"**Query:** `{query}`",
-                title=f"Retrieving from {doc_label} examples",
-                border_style=colorscheme.message,
-            )
-
         if not query.strip():
             return "The query is empty."
 
@@ -64,6 +62,33 @@ def make_retrieve_tool(
             ),
         ) as retriever:
             retrieved_examples = retriever.invoke(query)
+
+        # Format summary of what was retrieved
+        if retrieved_examples:
+            sources = [get_file_source(doc) for doc in retrieved_examples]
+            summary = f"Retrieved {len(retrieved_examples)} examples:\n" + "\n".join(f"- {s}" for s in sources)
+        else:
+            summary = "No examples found"
+
+        # Show results in CLI
+        print_to_console(
+            text=summary,
+            title=f"Retrieving from {doc_label} examples",
+            border_style=colorscheme.message,
+        )
+
+        # Log RAG retrieval with results
+        logger = get_session_logger()
+        if logger:
+            logger.log(
+                RAGEntry(
+                    content=summary,
+                    title=f"Retrieving from {doc_label} examples",
+                    query=query,
+                    source=doc_label,
+                    num_results=len(retrieved_examples) if retrieved_examples else 0,
+                )
+            )
 
         # Human interaction: filter docs/examples
         if configuration.human_interaction.retrieved_examples:
@@ -150,6 +175,18 @@ def retrieve_function_documentation(
         func_names=function_names
     )
 
+    # Log the retrieval
+    logger = get_session_logger()
+    if logger:
+        logger.log(
+            ToolEntry(
+                content=retrieved_signatures or "No documentation found",
+                title="Function Documentation Retriever",
+                tool_name="retrieve_function_documentation",
+                args={"function_names": function_names},
+            )
+        )
+
     if retrieved_signatures:
         return retrieved_signatures
 
@@ -163,7 +200,13 @@ class GrepSearchInput(BaseModel):
         description="The keyword based pattern to search for in files. Can be a regex or plain text pattern"
     )
     includePattern: Optional[str] = Field(
-        default=None, description="Search files matching this glob pattern."
+        default=None,
+        description=(
+            "File pattern to search (e.g. '*.jl' or '*.md'). "
+            "Defaults to '*.jl' and '*.md'. "
+            "Note: Use simple patterns like '*.jl', not glob patterns like '**/*.jl' - "
+            "the search is already recursive."
+        ),
     )
     isRegexp: Optional[bool] = Field(
         default=False, description="Whether the pattern is a regex."
@@ -172,7 +215,12 @@ class GrepSearchInput(BaseModel):
 
 @tool(
     "grep_search",
-    description="Do a keyword based search in the JutulDarcy documentation. Limited to 20 results. Use this tool to get an overview of which files to consider reading using the file-reader tool.",
+    description=(
+        "Search for keywords in JutulDarcy documentation and examples. "
+        "Searches recursively through all files. Limited to first 20 matches. "
+        "Returns file paths and line numbers with matching content. "
+        "Use this to discover which files contain relevant code before reading them with the file-reader tool."
+    ),
     args_schema=GrepSearchInput,
 )
 def grep_search(
@@ -205,7 +253,8 @@ def grep_search(
 
         if result.stdout:
             lines = result.stdout.strip().split("\n")[:20]  # Limit to 20 results
-            match_results = []
+            match_results = []  # Full details for agent
+            file_counts: dict[str, int] = {}
             for match in lines:
                 # Parse: filename:line_number:content
                 parts = match.split(":", 2)
@@ -214,22 +263,83 @@ def grep_search(
                     continue
                 filename, line_str, content = parts
                 match_results.append(f"File: {filename}, Line {line_str}: {content}")
+                file_counts[filename] = file_counts.get(filename, 0) + 1
 
-            print_text = (
-                f"Found {len(match_results)} matches:\n\n"
-                "```text\n" + "\n\n".join(match_results) + "\n```"
-            )
+            # Build file list with relative paths
+            file_list = []
+            for filepath, count in file_counts.items():
+                rel_path = filepath.replace(str(workspace_path) + "/", "")
+                match_text = "match" if count == 1 else "matches"
+                file_list.append(f"- {rel_path} ({count} {match_text})")
+
+            match_word = "match" if len(match_results) == 1 else "matches"
+            file_word = "file" if len(file_counts) == 1 else "files"
+
+            # Terminal: Show first 3 files only
+            if len(file_list) > 3:
+                terminal_output = f"First 3 of {len(file_counts)} {file_word} ({len(match_results)} {match_word} total):\n"
+                terminal_output += "\n".join(file_list[:3])
+                terminal_output += f"\n+ {len(file_list) - 3} more {file_word}"
+            else:
+                terminal_output = f"{len(match_results)} {match_word} in {len(file_counts)} {file_word}:\n" + "\n".join(file_list)
+
             print_to_console(
-                text=print_text[:500] + "...",
+                text=terminal_output,
                 title=f"Grep search: {query}",
                 border_style=colorscheme.message,
             )
-            out_text = f"Found {len(match_results)} matches:\n" + "\n\n".join(
-                match_results
-            )
-            return out_text
+
+            # Log: Show all files
+            log_output = f"Found {len(match_results)} {match_word} in {len(file_counts)} {file_word}:\n" + "\n".join(file_list)
+
+            logger = get_session_logger()
+            if logger:
+                logger.log(
+                    ToolEntry(
+                        content=log_output,
+                        title=f"Grep search: {query}",
+                        tool_name="grep_search",
+                        args={"query": query, "includePattern": includePattern},
+                    )
+                )
+
+            # Return full details to agent
+            return f"Found {len(match_results)} {match_word}:\n" + "\n\n".join(match_results)
         else:
-            return f"No matches found for: {query}"
+            no_match_msg = f"No matches found for: {query}"
+            print_to_console(
+                text=no_match_msg,
+                title=f"Grep search: {query}",
+                border_style=colorscheme.message,
+            )
+            logger = get_session_logger()
+            if logger:
+                logger.log(
+                    ToolEntry(
+                        content=no_match_msg,
+                        title=f"Grep search: {query}",
+                        tool_name="grep_search",
+                        args={"query": query, "includePattern": includePattern},
+                    )
+                )
+            return no_match_msg
 
     except Exception as e:
-        return f"Error during text search: {str(e)}"
+        error_msg = f"Error during text search: {str(e)}"
+        print_to_console(
+            text=error_msg,
+            title=f"Grep search error: {query}",
+            border_style=colorscheme.error,
+        )
+        logger = get_session_logger()
+        if logger:
+            logger.log(
+                ToolEntry(
+                    content=error_msg,
+                    title=f"Grep search error: {query}",
+                    tool_name="grep_search",
+                    args={"query": query, "includePattern": includePattern},
+                    error=str(e),
+                )
+            )
+        return error_msg

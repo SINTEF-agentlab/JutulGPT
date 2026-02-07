@@ -4,8 +4,14 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 
 from jutulgpt.cli import colorscheme, print_to_console
-from jutulgpt.configuration import BaseConfiguration, cli_mode
+from jutulgpt.configuration import (
+    DISPLAY_CONTENT_MAX_LENGTH,
+    OUTPUT_TRUNCATION_LIMIT,
+    BaseConfiguration,
+    cli_mode,
+)
 from jutulgpt.julia import get_error_message, get_linting_result, run_code
+from jutulgpt.logging import CodeRunnerEntry, ToolEntry, get_session_logger
 from jutulgpt.state import State
 from jutulgpt.utils import (
     add_julia_context,
@@ -15,6 +21,13 @@ from jutulgpt.utils import (
 )
 
 
+def _truncate(text: str, max_length: int = DISPLAY_CONTENT_MAX_LENGTH) -> str:
+    """Truncate text to max_length, adding ellipsis if truncated."""
+    if len(text) <= max_length:
+        return text
+    return text[:max_length] + "..."
+
+
 def _run_linter(code: str, print_code: bool = True) -> tuple[str, bool]:
     """
     Returns:
@@ -22,9 +35,7 @@ def _run_linter(code: str, print_code: bool = True) -> tuple[str, bool]:
         bool: True if issues were found, False otherwise.
     """
     if print_code:
-        display_code = f"```julia\n{code}\n```"
-        if len(display_code) > 500:
-            display_code = display_code[:500] + "..."
+        display_code = _truncate(f"```julia\n{code}\n```")
         print_to_console(
             text="Running static analysis:\n" + display_code,
             title="Linter",
@@ -38,6 +49,26 @@ def _run_linter(code: str, print_code: bool = True) -> tuple[str, bool]:
         )
 
     linting_result = get_linting_result(code)
+
+    logger = get_session_logger()
+    if logger:
+        if linting_result:
+            logger.log(
+                ToolEntry(
+                    content=f"Linter found issues:\n{_truncate(linting_result)}",
+                    title="Linter",
+                    tool_name="run_julia_linter",
+                )
+            )
+        else:
+            logger.log(
+                ToolEntry(
+                    content="Linter found no issues.",
+                    title="Linter",
+                    tool_name="run_julia_linter",
+                )
+            )
+
     if linting_result:
         linting_message = (
             "## Linter issues found:\n"
@@ -54,11 +85,10 @@ def _run_julia_code(code: str, print_code: bool = True) -> tuple[str, bool]:
         str: String containing the code running failed. Empty if the code executed successfully.
         bool: True if issues were found, False otherwise.
     """
+    logger = get_session_logger()
 
     if print_code:
-        display_code = f"```julia\n{code}\n```"
-        if len(display_code) > 500:
-            display_code = display_code[:500] + "..."
+        display_code = _truncate(f"```julia\n{code}\n```")
         print_to_console(
             text="Running code:\n" + display_code,
             title="Code Runner",
@@ -77,24 +107,61 @@ def _run_julia_code(code: str, print_code: bool = True) -> tuple[str, bool]:
     if result.get("error", False):
         julia_error_message = get_error_message(result)
 
+        # Truncate for display/logging if message is very long
+        is_truncated = len(julia_error_message) > OUTPUT_TRUNCATION_LIMIT
+        display_error = _truncate(julia_error_message, OUTPUT_TRUNCATION_LIMIT)
+
+        truncation_note = ""
+        if is_truncated:
+            truncation_note = f"\n\n[Truncated: {len(julia_error_message):,} chars → {OUTPUT_TRUNCATION_LIMIT:,} chars]"
+
         print_to_console(
-            text=f"Code failed!\n\n{julia_error_message}",
+            text=f"Code failed!\n\n{display_error}{truncation_note}",
             title="Code Runner",
             border_style=colorscheme.error,
         )
 
+        # Log failure with truncated error
+        if logger:
+            logger.log(
+                CodeRunnerEntry(
+                    content=f"Code failed!\n\n{display_error}{truncation_note}",
+                    title="Code Runner",
+                    code=code,
+                    language="julia",
+                    success=False,
+                )
+            )
+
+        # Return truncated error to agent
         code_runner_error_message = (
             "## Code runner error:\n"
             + "Running the code generated failed with the following error:\n"
-            + julia_error_message
+            + display_error
         )
+        if is_truncated:
+            code_runner_error_message += (
+                f"\n\n(Error output truncated from {len(julia_error_message):,} to {OUTPUT_TRUNCATION_LIMIT:,} characters)"
+            )
         return code_runner_error_message, True
 
+    runtime = round(result['runtime'], 2)
     print_to_console(
-        text=f"Code succeded in {round(result['runtime'], 2)} seconds!",
+        text=f"Code succeeded in {runtime} seconds!",
         title="Code Runner",
         border_style=colorscheme.success,
     )
+    # Log success
+    if logger:
+        logger.log(
+            CodeRunnerEntry(
+                content=f"Code succeeded in {runtime} seconds!",
+                title="Code Runner",
+                code=code,
+                language="julia",
+                success=True,
+            )
+        )
 
     return "", False
 
@@ -151,7 +218,7 @@ def check_code(
     code = fix_imports(code)
 
     # Then shorten the code for faster simulations
-    code = shorter_simulations(code)
+    #code = shorter_simulations(code)
 
     # Running the linter
     linting_message, linting_issues_found = _run_linter(code, print_code=False)

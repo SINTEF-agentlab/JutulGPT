@@ -13,8 +13,43 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from jutulgpt.cli import colorscheme, print_to_console
+from jutulgpt.configuration import OUTPUT_TRUNCATION_LIMIT
+from jutulgpt.logging import ToolEntry, get_session_logger
 from jutulgpt.nodes.check_code import _run_julia_code, _run_linter
 from jutulgpt.utils import fix_imports, shorter_simulations
+
+
+def _truncate_output(text: str, max_length: int = OUTPUT_TRUNCATION_LIMIT) -> tuple[str, bool]:
+    """Truncate text to max_length. Returns (truncated_text, was_truncated)."""
+    if len(text) <= max_length:
+        return text, False
+    return text[:max_length] + "...", True
+
+
+def _format_subprocess_output(result: subprocess.CompletedProcess, include_exit_code: bool = True) -> str:
+    """Format subprocess result with truncation. Returns formatted output string."""
+    parts = []
+    truncation_info = []
+
+    if result.stdout:
+        stdout_truncated, was_truncated = _truncate_output(result.stdout)
+        parts.append(f"STDOUT:\n{stdout_truncated}")
+        if was_truncated:
+            truncation_info.append(f"stdout: {len(result.stdout):,} → {OUTPUT_TRUNCATION_LIMIT:,} chars")
+
+    if result.stderr:
+        stderr_truncated, was_truncated = _truncate_output(result.stderr)
+        parts.append(f"STDERR:\n{stderr_truncated}")
+        if was_truncated:
+            truncation_info.append(f"stderr: {len(result.stderr):,} → {OUTPUT_TRUNCATION_LIMIT:,} chars")
+
+    if include_exit_code and result.returncode != 0:
+        parts.append(f"EXIT CODE: {result.returncode}")
+
+    if truncation_info:
+        parts.append(f"[Output truncated: {'; '.join(truncation_info)}]")
+
+    return "\n\n".join(parts)
 
 
 class RunJuliaCodeInput(BaseModel):
@@ -49,10 +84,10 @@ class RunJuliaLinterInput(BaseModel):
     description="Run a static analysis of Julia code using a linter. Returns output or error message.",
 )
 def run_julia_linter(code: str):
-    out, code_failed = _run_linter(code)
-    if not code_failed:
+    out, issues_found = _run_linter(code)
+    if issues_found:
         return out
-    return "Linter found no issues!"
+    return "Linter found no issues."
 
 
 @tool("execute_terminal_command", parse_docstring=True)
@@ -87,13 +122,7 @@ def execute_terminal_command(command: str) -> str:
             timeout=60,  # 60 second timeout
         )
 
-        output = ""
-        if result.stdout:
-            output += f"# STDOUT:\n\n```text\n{result.stdout}\n```\n\n"
-        if result.stderr:
-            output += f"# STDERR:\n\n```text\n{result.stderr}\n```\n\n"
-        if result.returncode != 0:
-            output += f"EXIT CODE: {result.returncode}\n"
+        output = _format_subprocess_output(result)
 
         print_to_console(
             text=output,
@@ -103,6 +132,19 @@ def execute_terminal_command(command: str) -> str:
             else colorscheme.message,
         )
 
+        # Log to session file if logger available
+        logger = get_session_logger()
+        if logger:
+            logger.log(
+                ToolEntry(
+                    content=output,
+                    title="Run finished",
+                    tool_name="execute_terminal_command",
+                    args={"command": command, "cwd": working_directory},
+                    returncode=result.returncode,
+                )
+            )
+
         return (
             output.strip()
             if output.strip()
@@ -110,20 +152,44 @@ def execute_terminal_command(command: str) -> str:
         )
 
     except subprocess.TimeoutExpired:
+        error_msg = "ERROR: Command execution timed out after 60 seconds."
         print_to_console(
-            text="ERROR: Command execution timed out after 60 seconds.",
+            text=error_msg,
             title="Run error",
-            border_style=colorscheme.success,
+            border_style=colorscheme.error,
         )
+        logger = get_session_logger()
+        if logger:
+            logger.log(
+                ToolEntry(
+                    content=error_msg,
+                    title="Run error",
+                    tool_name="execute_terminal_command",
+                    args={"command": command, "cwd": working_directory},
+                    error="timeout",
+                )
+            )
+        return error_msg
 
-        return "ERROR: Command execution timed out after 60 seconds."
     except Exception as e:
+        error_msg = f"ERROR: Failed to execute command: {str(e)}"
         print_to_console(
-            text=f"ERROR: Failed to execute command: {str(e)}",
+            text=error_msg,
             title="Run error",
-            border_style=colorscheme.success,
+            border_style=colorscheme.error,
         )
-        return f"ERROR: Failed to execute command: {str(e)}"
+        logger = get_session_logger()
+        if logger:
+            logger.log(
+                ToolEntry(
+                    content=error_msg,
+                    title="Run error",
+                    tool_name="execute_terminal_command",
+                    args={"command": command, "cwd": working_directory},
+                    error=str(e),
+                )
+            )
+        return error_msg
 
 
 @tool
@@ -301,14 +367,7 @@ def execute_julia_file(file_path: str) -> str:
         )
 
         output = f"=== Execution of {file_path} ===\n"
-
-        if result.stdout:
-            output += f"STDOUT:\n{result.stdout}\n"
-
-        if result.stderr:
-            output += f"STDERR:\n{result.stderr}\n"
-
-        output += f"EXIT CODE: {result.returncode}\n"
+        output += _format_subprocess_output(result, include_exit_code=True)
 
         print_to_console(
             text=output.strip(),

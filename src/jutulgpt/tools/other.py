@@ -1,14 +1,35 @@
 from __future__ import annotations
 
 import os
+import re
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from rich.panel import Panel
 
 from jutulgpt.cli import colorscheme, print_to_console
-from jutulgpt.configuration import cli_mode
+from jutulgpt.configuration import DISPLAY_CONTENT_MAX_LENGTH, cli_mode
 from jutulgpt.globals import console
+from jutulgpt.logging import ToolEntry, get_session_logger
+
+
+def _truncate(text: str, max_length: int = DISPLAY_CONTENT_MAX_LENGTH) -> str:
+    """Truncate text to max_length, adding ellipsis if truncated."""
+    if len(text) <= max_length:
+        return text
+    return text[:max_length] + "..."
+
+
+def _get_fence(content: str, min_backticks: int = 3) -> str:
+    """Return a fence string that won't conflict with content.
+
+    Finds the longest sequence of backticks in content and returns
+    a fence that is at least one backtick longer.
+    """
+    matches = re.findall(r"`+", content)
+    max_found = max((len(m) for m in matches), default=0)
+    num_backticks = max(min_backticks, max_found + 1)
+    return "`" * num_backticks
 
 
 class ReadFromFileInput(BaseModel):
@@ -62,12 +83,26 @@ def read_from_file(
 
         total_lines = len(lines)
 
-        print_text = f"````text\n{'\n'.join(result_lines)}\n```"
+        content = "\n".join(result_lines)
+        # Truncate content before adding fences to ensure fence is never cut off
+        truncated_content = _truncate(content)
+        fence = _get_fence(truncated_content, min_backticks=3)
+        display_text = f"{fence}text\n{truncated_content}\n{fence}"
         print_to_console(
-            text=print_text[:500] + "...",
-            title=f"Read file: {file_path}",
+            text=display_text,
+            title=f"Read file: {file_path}",
             border_style=colorscheme.message,
         )
+        logger = get_session_logger()
+        if logger:
+            logger.log(
+                ToolEntry(
+                    content=display_text,
+                    title=f"Read file: {file_path}",
+                    tool_name="read_from_file",
+                    args={"file_path": file_path, "lines": f"{start}-{end - 1}"},
+                )
+            )
         return (
             f"File: {file_path} (lines {start}-{end - 1} of {total_lines} total)\n"
             + "\n".join(result_lines)
