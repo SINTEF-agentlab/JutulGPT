@@ -17,9 +17,8 @@ class RetrieverSpec:
 
 def _get_jutuldarcy_docs_path() -> str:
     """Get the path to JutulDarcy docs from the installed Julia package."""
-    from jutulgpt.rag.package_path import check_version_and_invalidate, get_package_root
+    from jutulgpt.rag.package_path import get_package_root
 
-    check_version_and_invalidate()
     root = get_package_root()
     if root is None:
         raise RuntimeError(
@@ -31,9 +30,8 @@ def _get_jutuldarcy_docs_path() -> str:
 
 def _get_jutuldarcy_examples_path() -> str:
     """Get the path to JutulDarcy examples from the installed Julia package."""
-    from jutulgpt.rag.package_path import check_version_and_invalidate, get_package_root
+    from jutulgpt.rag.package_path import get_package_root
 
-    check_version_and_invalidate()
     root = get_package_root()
     if root is None:
         raise RuntimeError(

@@ -16,7 +16,7 @@ def _load_and_split_docs(spec: RetrieverSpec) -> list:
         loader = DirectoryLoader(
             path=dir_path,
             glob=f"**/*.{filetype}",
-            show_progress=True,
+            show_progress=False,
             loader_cls=TextLoader,
         )
         docs.extend(loader.load())

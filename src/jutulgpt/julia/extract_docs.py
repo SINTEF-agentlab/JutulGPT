@@ -6,11 +6,34 @@ This provides actual docstrings rather than just references like in the markdown
 
 import json
 import pickle
+import tomllib
 from pathlib import Path
 from typing import Optional
 
 from jutulgpt.cli import colorscheme, print_to_console
 from jutulgpt.julia.julia_code_runner import run_code_string_direct
+
+
+def _get_package_version() -> Optional[str]:
+    """Read the installed JutulDarcy version from its Project.toml."""
+    from jutulgpt.rag.package_path import get_package_root
+
+    root = get_package_root()
+    if root is None:
+        return None
+    project_toml = root / "Project.toml"
+    if not project_toml.exists():
+        return None
+    with open(project_toml, "rb") as f:
+        return tomllib.load(f).get("version")
+
+
+def _default_cache_path() -> Path:
+    from jutulgpt.configuration import PROJECT_ROOT
+
+    cache_dir = PROJECT_ROOT.parent / ".cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / "jutuldarcy_function_docs.pkl"
 
 
 def extract_jutuldarcy_documentation(
@@ -22,40 +45,39 @@ def extract_jutuldarcy_documentation(
     This uses Julia's @doc macro to get the actual docstrings for all exported
     functions, types, and constants from JutulDarcy and Jutul.
 
+    Results are cached to disk.  The cache is automatically invalidated when
+    the installed JutulDarcy version changes.
+
     Args:
-        cache_path: Path to cache the extracted documentation (default: PROJECT_ROOT / ".cache" / "jutuldarcy_docs.pkl")
-        force_refresh: Force re-extraction even if cache exists
+        cache_path: Path to cache the extracted documentation.
+        force_refresh: Force re-extraction even if cache exists.
 
     Returns:
-        Dictionary mapping qualified function names to their documentation strings
+        Dictionary mapping qualified function names to their documentation strings.
     """
     if cache_path is None:
-        from jutulgpt.configuration import PROJECT_ROOT
+        cache_path = _default_cache_path()
 
-        cache_dir = PROJECT_ROOT.parent / ".cache"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_path = cache_dir / "jutuldarcy_function_docs.pkl"
+    current_version = _get_package_version()
 
     # Check cache first
     if not force_refresh and cache_path.exists():
         try:
             with open(cache_path, "rb") as f:
-                docs = pickle.load(f)
-                # Silently load from cache - no need to announce this every time
-                return docs
+                cached = pickle.load(f)
+            # Support both old format (bare dict) and new format (dict with version key)
+            if isinstance(cached, dict) and "version" in cached and "docs" in cached:
+                if cached["version"] == current_version:
+                    return cached["docs"]
+            elif isinstance(cached, dict):
+                # Old format without version — treat as stale
+                pass
         except Exception as e:
             print_to_console(
                 text=f"Failed to load cache: {e}. Re-extracting...",
                 title="JutulDarcy Documentation",
                 border_style=colorscheme.warning,
             )
-
-    # Extract documentation using Julia
-    # print_to_console(
-    #     text="Extracting function documentation from JutulDarcy (this may take a moment)...",
-    #     title="JutulDarcy Documentation",
-    #     border_style=colorscheme.message,
-    # )
 
     julia_code = """
     using JutulDarcy
@@ -111,15 +133,9 @@ def extract_jutuldarcy_documentation(
         # Parse JSON output
         docs = json.loads(stdout.strip())
 
-        # Cache the results
+        # Cache the results with version for future invalidation
         with open(cache_path, "wb") as f:
-            pickle.dump(docs, f)
-
-        # print_to_console(
-        #     text=f"Extracted {len(docs)} function documentations",
-        #     title="JutulDarcy Documentation",
-        #     border_style=colorscheme.success,
-        # )
+            pickle.dump({"version": current_version, "docs": docs}, f)
 
         return docs
 
