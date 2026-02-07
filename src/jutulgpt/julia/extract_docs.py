@@ -51,11 +51,11 @@ def extract_jutuldarcy_documentation(
             )
 
     # Extract documentation using Julia
-    print_to_console(
-        text="Extracting function documentation from JutulDarcy (this may take a moment)...",
-        title="JutulDarcy Documentation",
-        border_style=colorscheme.message,
-    )
+    # print_to_console(
+    #     text="Extracting function documentation from JutulDarcy (this may take a moment)...",
+    #     title="JutulDarcy Documentation",
+    #     border_style=colorscheme.message,
+    # )
 
     julia_code = """
     using JutulDarcy
@@ -115,11 +115,11 @@ def extract_jutuldarcy_documentation(
         with open(cache_path, "wb") as f:
             pickle.dump(docs, f)
 
-        print_to_console(
-            text=f"Extracted {len(docs)} function documentations",
-            title="JutulDarcy Documentation",
-            border_style=colorscheme.success,
-        )
+        # print_to_console(
+        #     text=f"Extracted {len(docs)} function documentations",
+        #     title="JutulDarcy Documentation",
+        #     border_style=colorscheme.success,
+        # )
 
         return docs
 

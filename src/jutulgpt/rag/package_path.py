@@ -1,7 +1,9 @@
 """
 Resolve JutulDarcy's installed package path from Julia and manage cache invalidation.
 
-The package root is resolved via ``pathof(JutulDarcy)`` and cached both in-memory and on disk so that subsequent runs avoid Julia startup.
+The package root is resolved via ``pathof(JutulDarcy)`` and cached in-memory
+for the lifetime of the process.  Set ``[retrieval].package_path`` in
+``jutulgpt.toml`` to skip Julia startup entirely.
 """
 
 import json
@@ -44,16 +46,15 @@ def get_package_root() -> Optional[Path]:
     """Return the root directory of the installed JutulDarcy Julia package.
 
     Resolution order:
-    0. ``jutulgpt.toml`` ``[retrieval].package_path`` (explicit, skips all caching).
-    1. In-memory cache (fastest, per-process).
-    2. ``metadata.json`` on disk (persists across runs).
-    3. ``julia -e 'using JutulDarcy; println(pathof(JutulDarcy))'`` (slow).
+    1. ``jutulgpt.toml`` ``[retrieval].package_path`` (explicit, no Julia needed).
+    2. In-memory cache (per-process).
+    3. ``julia -e 'using JutulDarcy; println(pathof(JutulDarcy))'`` (slow, once per process).
 
     Returns ``None`` if JutulDarcy is not installed.
     """
     global _cached_root
 
-    # 0. TOML config (explicit path, skips Julia call and disk cache)
+    # 1. TOML config (explicit path, skips Julia call entirely)
     from jutulgpt.configuration import _toml
 
     toml_path = _toml.get("retrieval", {}).get("package_path")
@@ -63,25 +64,14 @@ def get_package_root() -> Optional[Path]:
             _cached_root = p
             return _cached_root
 
-    # 1. In-memory
+    # 2. In-memory cache
     if _cached_root is not None:
         return _cached_root
 
-    # 2. Disk metadata
-    meta = _load_metadata()
-    disk_path = meta.get("package_path")
-    if disk_path:
-        p = Path(disk_path)
-        if p.is_dir():
-            _cached_root = p
-            return _cached_root
-
-    # 3. Julia call
+    # 3. Julia call (result cached in memory for the rest of the process)
     root = _resolve_from_julia()
     if root is not None:
         _cached_root = root
-        meta["package_path"] = str(root)
-        _save_metadata(meta)
     return root
 
 
