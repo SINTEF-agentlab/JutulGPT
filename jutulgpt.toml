@@ -3,7 +3,7 @@ llm = "openai:gpt-4.1"
 temperature = 0
 
 [retrieval]
-top_k = 3
+top_k = 3 # Number of retrieved examples when doing a keyword-based search
 # package_path = "/path/to/JutulDarcy" # Optional: set manually to avoid Julia startup
 
 [mode]

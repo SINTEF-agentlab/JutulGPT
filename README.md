@@ -86,7 +86,6 @@ uv run examples/agent.py
 
 This should install the necessary Julia packages before running. You might need to re-run the model after the installation.
 
-> **Note**: On first run, JutulGPT automatically downloads the latest JutulDarcy documentation from GitHub and caches it locally. This happens in the background with no user intervention required. See `scripts/README.md` for cache management options.
 
 ## Basic usage
 
@@ -118,62 +117,22 @@ uv run examples/autonomous_agent.py
 
 ## Settings and configuration
 
-The agent is configured in the `src/jutulgpt/configuration.py` file.  
+The agent is configured in the `jutulgpt.toml` file. This is where you specify things like which LLM to use, and the number of examples to retrieve.
 
-The two main settings you must specify are
+> Note: We are in the process of migrating settings from the `src/jutulgpt/configuration.py` file, so some settings might still be there.
 
-```bash
-# Static settings
-cli_mode: bool = True
-
-# Select whether to use local models through Ollama or use OpenAI
-LOCAL_MODELS = False
-LLM_MODEL_NAME = "ollama:qwen3:14b" if LOCAL_MODELS else "openai:gpt-4.1"
-EMBEDDING_MODEL_NAME = (
-    "ollama:nomic-embed-text" if LOCAL_MODELS else "openai:text-embedding-3-small"
-)
-```
-
-More advanced settings are set in the `BaseConfiguration`. LangGraph will turn these into a `RunnableConfig`, which enables easier configuration at runtime.  You specify the following settings:
-
-- `human_interaction`: Enable human-in-the-loop. See the `HumanInteraction` class in the configuration file for detailed control.
-- `embedding_model`: Name of the embedding model to use. By default equal to the `EMBEDDING_MODEL_NAME`.
-- `retriever_provider`: The vector store provider to use for retrieval.
-- `examples_search_type`: Defines the type of search that the retriever should perform when retrieving examples.
-- `examples_search_kwargs`: Keyword arguments to pass to the search function of the retriever when retrieving examples. See [LangGraph documentation](https://python.langchain.com/api_reference/chroma/vectorstores/langchain_chroma.vectorstores.Chroma.html#langchain_chroma.vectorstores.Chroma.as_retriever) for details about what arguments works for the different search types.
-- `rerank_provider`: The provider user for reranking the retrieved documents.
-- `rerank_kwargs`: Keyword arguments provided to the reranker.
-- `agent_model`: The language model used for generating responses. Should be in the form: provider/model-name. Currently I have only tested using `OpenAI` or `Ollama` models, but should be easy to extend to other providers. By default equal to the `LLM_MODEL_NAME`.
-- `autonomous_agent_model`: See `agent_model`.
-- `agent_prompt`: The prompt used for the agent.
-- `autonomous_agent_prompt`: The prompt used for the autonomous agent.
-
-The settings can be specified by passing a configuration dictionary when invoking the models. See f.ex the `run()` function in `src/jutulgpt/agents/agent_base.py`. Alternatively, the GUI provides a custom interface where the settings can be selected.
 
 ## Interfaces
 
 ### CLI
 
-Enable the CLI-mode by in `src/jutulgpt/configuration.py` setting
-
-```python
-cli_mode = True
-```
-
-This gives you a nice interface for asking questions, retrieving info, generating and running code etc. Both agents can also read and write to files.
+Enable the CLI-mode by in `jutulgpt.toml` by setting `cli_mode = True`. Then, you can run the agents through the CLI by running the examples as shown above. This gives you a nice interface for asking questions, retrieving info, generating and running code etc. Both agents can also read and write to files.
 
 ### VSCode integration using MCP
 
 For calling using JutulGPT from VSCode, it can communicate with Copilot through setting up an [MCP server](https://code.visualstudio.com/docs/copilot/customization/mcp-servers).
 
-To enable MCP server in JutulGPT, in `src/jutulgpt/configuration.py` set
-
-```python
-cli_mode = False # Disable CLI mode
-mcp_mode = True
-```
-
-and start JutulGPT through the [Langgraph CLI](https://docs.langchain.com/langsmith/cli) by running
+To enable MCP server in JutulGPT, specify in `jutulgpt.toml`,  and start JutulGPT through the [Langgraph CLI](https://docs.langchain.com/langsmith/cli) by running
 
 ```bash
 source .venv/bin/activate # If not already activated
@@ -186,7 +145,7 @@ Then, in the VSCode workspace where you want to use JutulGPT, add the an MCP ser
 
 ![GUI example](media/JutulGPT_GUI.png "GUI example")
 
-The JutulGPT also has an associated GUI called [JutulGPT-GUI](https://github.com/ellingsvee/JutulGPT-GUI).  For using the GUI, you must disable the CLI-mode. To this by setting `cli_mode = False` in `src/jutulgpt/configuration.py`.
+The JutulGPT also has an associated GUI called [JutulGPT-GUI](https://github.com/ellingsvee/JutulGPT-GUI).  For using the GUI, you must disable the CLI-mode. To this by setting `cli = False` in `jutulgpt.toml`.
 
 Install it by following the instructions in the repository. Alternatively do
 
@@ -212,18 +171,4 @@ pnpm dev # Run from JutulGPT-GUI/ directory
 
 The GUI can now be accessed on `http://localhost:3000/` (or some other location depending on your JutulGPT-GUI configuration).
 
-> NOTE: Remember to set `cli_mode = False` in `src/jutulgpt/configuration.py`.
-
-## Fimbul (WARNING)
-
-There is some legacy code for generating code for the Fimbul package. I have removed a lot of it, but it can be re-implemented by adding some tools and modifying the prompts. My suggestion is to get familiar with the current tools fot JutulDarcy, and then later extend to Fimbul.
-
-## Testing
-
-Tests are set up to be implemented using [pytest](https://docs.pytest.org/en/stable/). They can be written in the `tests/` directory. Run by the command
-
-```bash
-uv run pytest
-```
-
-> Note: No tests have yet been implemented.
+> NOTE: Remember to set `cli = False` in `jutulgpt.toml`.
