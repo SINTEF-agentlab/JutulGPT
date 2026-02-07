@@ -1,25 +1,17 @@
-import os
-
 from langchain_community.retrievers import BM25Retriever
 
 from jutulgpt.rag.retriever_specs import RetrieverSpec
 
 
 def _load_and_split_docs(spec: RetrieverSpec) -> list:
-    import pickle
-
     from langchain_community.document_loaders import DirectoryLoader, TextLoader
 
     # Resolve dir_path if it's a callable
     dir_path = spec.dir_path() if callable(spec.dir_path) else spec.dir_path
 
-    # Load or cache documents
-    if isinstance(spec.filetype, str):
-        filetypes = [spec.filetype]
-    else:
-        filetypes = spec.filetype
+    filetypes = [spec.filetype] if isinstance(spec.filetype, str) else spec.filetype
 
-    loaders = []
+    docs = []
     for filetype in filetypes:
         loader = DirectoryLoader(
             path=dir_path,
@@ -27,23 +19,7 @@ def _load_and_split_docs(spec: RetrieverSpec) -> list:
             show_progress=True,
             loader_cls=TextLoader,
         )
-        loaders.append(loader)
-
-    # Ensure cache directory exists
-    cache_dir = os.path.dirname(spec.cache_path)
-    if cache_dir:
-        os.makedirs(cache_dir, exist_ok=True)
-
-    if os.path.exists(spec.cache_path):
-        with open(spec.cache_path, "rb") as f:
-            docs = pickle.load(f)
-    else:
-        docs = []
-        for loader in loaders:
-            docs.extend(loader.load())
-
-        with open(spec.cache_path, "wb") as f:
-            pickle.dump(docs, f)
+        docs.extend(loader.load())
 
     # Split documents
     chunks = []

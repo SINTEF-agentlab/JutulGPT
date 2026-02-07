@@ -5,7 +5,6 @@ The package root is resolved via ``pathof(JutulDarcy)`` and cached both in-memor
 """
 
 import json
-import shutil
 import sys
 from pathlib import Path
 from typing import Optional
@@ -45,6 +44,7 @@ def get_package_root() -> Optional[Path]:
     """Return the root directory of the installed JutulDarcy Julia package.
 
     Resolution order:
+    0. ``jutulgpt.toml`` ``[retrieval].package_path`` (explicit, skips all caching).
     1. In-memory cache (fastest, per-process).
     2. ``metadata.json`` on disk (persists across runs).
     3. ``julia -e 'using JutulDarcy; println(pathof(JutulDarcy))'`` (slow).
@@ -52,6 +52,16 @@ def get_package_root() -> Optional[Path]:
     Returns ``None`` if JutulDarcy is not installed.
     """
     global _cached_root
+
+    # 0. TOML config (explicit path, skips Julia call and disk cache)
+    from jutulgpt.configuration import _toml
+
+    toml_path = _toml.get("retrieval", {}).get("package_path")
+    if toml_path:
+        p = Path(toml_path)
+        if p.is_dir():
+            _cached_root = p
+            return _cached_root
 
     # 1. In-memory
     if _cached_root is not None:
@@ -122,9 +132,8 @@ def get_package_version(root: Path) -> Optional[str]:
 def check_version_and_invalidate() -> bool:
     """Compare the current package version to the cached one.
 
-    If the version changed (or is being recorded for the first time), all
-    derived caches (vector stores, loaded docs pickles, function docs) are
-    deleted and the metadata is updated.
+    If the version changed (or is being recorded for the first time), the
+    function docs cache is deleted and the metadata is updated.
 
     Returns ``True`` if caches were invalidated.
     """
@@ -158,46 +167,17 @@ def check_version_and_invalidate() -> bool:
 
 
 def _clear_derived_caches() -> None:
-    """Delete vector stores, loaded-doc pickles, and function-docs cache."""
+    """Delete the function-docs cache when the package version changes."""
     from jutulgpt.configuration import PROJECT_ROOT
 
     cache_root = PROJECT_ROOT.parent / ".cache"
-    cleared = 0
 
-    # Loaded docs pickles
-    loaded_store = cache_root / "loaded_store"
-    if loaded_store.exists():
-        for p in loaded_store.glob("loaded_jutuldarcy_*.pkl"):
-            p.unlink()
-            cleared += 1
-
-    # Retriever vector stores
-    retriever_store = cache_root / "retriever_store"
-    if retriever_store.exists():
-        for p in retriever_store.glob("retriever_jutuldarcy_*"):
-            if p.is_dir():
-                shutil.rmtree(p)
-            else:
-                p.unlink()
-            cleared += 1
-
-    # Function docs pickle
+    # Function docs pickle (Julia @doc extraction is slow, so it's cached)
     func_docs = cache_root / "jutuldarcy_function_docs.pkl"
     if func_docs.exists():
         func_docs.unlink()
-        cleared += 1
-
-    # Clean up old GitHub-fetched directories
-    jd_cache = cache_root / "jutuldarcy"
-    for subdir in ("docs", "examples"):
-        old = jd_cache / subdir
-        if old.exists():
-            shutil.rmtree(old)
-            cleared += 1
-
-    if cleared:
         print_to_console(
-            text=f"Cleared {cleared} derived cache(s)",
+            text="Cleared function docs cache",
             title="Package Path",
             border_style=colorscheme.success,
         )

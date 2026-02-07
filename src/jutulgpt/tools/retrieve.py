@@ -153,30 +153,32 @@ def retrieve_function_documentation(
 
     # Load extracted documentation (silently)
     all_docs = extract_jutuldarcy_documentation()
-    
+
     found_docs = []
     not_found = []
-    
+
     for func_name in function_names:
         # Try to find in extracted docs (try different variations)
         doc_found = False
-        
+
         # Check exact match and with module prefixes
         possible_names = [
             func_name,
             f"JutulDarcy.{func_name}",
             f"Jutul.{func_name}",
         ]
-        
+
         for name_variant in possible_names:
             if name_variant in all_docs:
-                found_docs.append(format_function_doc(name_variant, all_docs[name_variant]))
+                found_docs.append(
+                    format_function_doc(name_variant, all_docs[name_variant])
+                )
                 doc_found = True
                 break
-        
+
         if not doc_found:
             not_found.append(func_name)
-    
+
     # Fallback: Try live @doc for functions not found in extracted docs
     if not_found:
         _, live_docs = get_function_documentation_from_list_of_funcs(
@@ -184,7 +186,7 @@ def retrieve_function_documentation(
         )
         if live_docs:
             found_docs.append(f"# Additional documentation from @doc\n\n{live_docs}")
-    
+
     if found_docs:
         result = "\n\n---\n\n".join(found_docs)
         # Only print summary if there were issues finding some functions
@@ -201,7 +203,7 @@ def retrieve_function_documentation(
                 border_style=colorscheme.success,
             )
         return result
-    
+
     return "No function documentation found for the provided function names."
 
 
@@ -291,7 +293,7 @@ def grep_search(
 
         root = get_package_root()
         if root is None:
-            return "JutulDarcy is not installed. Install it in Julia with: using Pkg; Pkg.add(\"JutulDarcy\")"
+            return 'JutulDarcy is not installed. Install it in Julia with: using Pkg; Pkg.add("JutulDarcy")'
         workspace_path = str(root)
         cmd_parts = ["grep", "-r", "-n"]
 
