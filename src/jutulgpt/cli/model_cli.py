@@ -61,4 +61,3 @@ def apply_model_from_cli(model: str) -> None:
     cfg.ACTIVE_MODEL = f"{cfg.ACTIVE_PROVIDER}:{cfg.ACTIVE_MODEL_NAME}"
     cfg.MODEL_CONTEXT_WINDOW = cfg.ACTIVE_MODEL_CONFIG.context_window
     cfg.EMBEDDING_MODEL_NAME = cfg._EMBEDDING_MODEL_BY_PROVIDER[cfg.ACTIVE_PROVIDER]
-

@@ -85,7 +85,9 @@ class SessionLogger:
         # Get version info setting from config if available
         include_version_info = getattr(config, "log_version_info", True)
 
-        return cls(log_path=log_path, enabled=True, include_version_info=include_version_info)
+        return cls(
+            log_path=log_path, enabled=True, include_version_info=include_version_info
+        )
 
     @property
     def enabled(self) -> bool:
@@ -134,7 +136,10 @@ class SessionLogger:
             # Fail silently to avoid crashing the agent
             import sys
 
-            print(f"Warning: Failed to write to log '{self._log_path}': {exc}", file=sys.stderr)
+            print(
+                f"Warning: Failed to write to log '{self._log_path}': {exc}",
+                file=sys.stderr,
+            )
 
     def log(self, entry: LogEntry) -> None:
         """Log a typed entry to the session file.

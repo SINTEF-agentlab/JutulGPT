@@ -58,7 +58,9 @@ ON_ERROR = Interaction(
     title="Code check failed",
     options=(
         Option(Action.ACCEPT, "Try to fix the code"),
-        Option(Action.FEEDBACK, "Give extra feedback to the model on what might be wrong"),
+        Option(
+            Action.FEEDBACK, "Give extra feedback to the model on what might be wrong"
+        ),
         Option(Action.SKIP, "Skip code fixing"),
     ),
     default=Action.ACCEPT,

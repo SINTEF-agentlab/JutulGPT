@@ -66,7 +66,9 @@ def make_retrieve_tool(
         # Format summary of what was retrieved
         if retrieved_examples:
             sources = [get_file_source(doc) for doc in retrieved_examples]
-            summary = f"Retrieved {len(retrieved_examples)} examples:\n" + "\n".join(f"- {s}" for s in sources)
+            summary = f"Retrieved {len(retrieved_examples)} examples:\n" + "\n".join(
+                f"- {s}" for s in sources
+            )
         else:
             summary = "No examples found"
 
@@ -281,7 +283,10 @@ def grep_search(
                 terminal_output += "\n".join(file_list[:3])
                 terminal_output += f"\n+ {len(file_list) - 3} more {file_word}"
             else:
-                terminal_output = f"{len(match_results)} {match_word} in {len(file_counts)} {file_word}:\n" + "\n".join(file_list)
+                terminal_output = (
+                    f"{len(match_results)} {match_word} in {len(file_counts)} {file_word}:\n"
+                    + "\n".join(file_list)
+                )
 
             print_to_console(
                 text=terminal_output,
@@ -290,7 +295,10 @@ def grep_search(
             )
 
             # Log: Show all files
-            log_output = f"Found {len(match_results)} {match_word} in {len(file_counts)} {file_word}:\n" + "\n".join(file_list)
+            log_output = (
+                f"Found {len(match_results)} {match_word} in {len(file_counts)} {file_word}:\n"
+                + "\n".join(file_list)
+            )
 
             logger = get_session_logger()
             if logger:
@@ -304,7 +312,9 @@ def grep_search(
                 )
 
             # Return full details to agent
-            return f"Found {len(match_results)} {match_word}:\n" + "\n\n".join(match_results)
+            return f"Found {len(match_results)} {match_word}:\n" + "\n\n".join(
+                match_results
+            )
         else:
             no_match_msg = f"No matches found for: {query}"
             print_to_console(

@@ -24,8 +24,7 @@ def get_package_root(package_name: str) -> Path:
     only spawned once per package per session.
     """
     julia_code = (
-        f"using {package_name}; "
-        f"print(dirname(dirname(pathof({package_name}))))"
+        f"using {package_name}; print(dirname(dirname(pathof({package_name}))))"
     )
     stdout, stderr = run_code_string_direct(julia_code)
 
@@ -37,8 +36,7 @@ def get_package_root(package_name: str) -> Path:
         raise FileNotFoundError(f"Resolved path does not exist: {path}")
 
     raise RuntimeError(
-        f"Failed to resolve {package_name} package path. "
-        f"Julia stderr: {stderr.strip()}"
+        f"Failed to resolve {package_name} package path. Julia stderr: {stderr.strip()}"
     )
 
 
@@ -58,9 +56,7 @@ def get_package_docs_path(package_name: str, subdirs: list[str] | None = None) -
             return str(candidate)
 
     tried = ", ".join(str(root / s) for s in subdirs)
-    raise FileNotFoundError(
-        f"{package_name} documentation not found. Tried: {tried}"
-    )
+    raise FileNotFoundError(f"{package_name} documentation not found. Tried: {tried}")
 
 
 def get_package_examples_path(package_name: str, subdir: str = "examples") -> str:
@@ -68,7 +64,5 @@ def get_package_examples_path(package_name: str, subdir: str = "examples") -> st
     root = get_package_root(package_name)
     examples_path = root / subdir
     if not examples_path.exists():
-        raise FileNotFoundError(
-            f"{package_name} examples not found at {examples_path}"
-        )
+        raise FileNotFoundError(f"{package_name} examples not found at {examples_path}")
     return str(examples_path)

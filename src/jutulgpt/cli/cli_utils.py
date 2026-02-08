@@ -200,7 +200,11 @@ def stream_to_console(
                 live = None
             if reasoning_summary:
                 console.print(
-                    Panel.fit(Markdown(reasoning_summary), title="Reasoning Summary", border_style="yellow")
+                    Panel.fit(
+                        Markdown(reasoning_summary),
+                        title="Reasoning Summary",
+                        border_style="yellow",
+                    )
                 )
 
         phase = new_phase
@@ -208,7 +212,12 @@ def stream_to_console(
         # Update live display
         if phase != "idle":
             if live is None:
-                live = Live(_build_display(), console=console, transient=True, refresh_per_second=8)
+                live = Live(
+                    _build_display(),
+                    console=console,
+                    transient=True,
+                    refresh_per_second=8,
+                )
                 live.start()
             else:
                 live.update(_build_display())
@@ -243,7 +252,13 @@ def stream_to_console(
     # Reasoning: only if we stayed in reasoning phase (tool-call-only response)
     # If we transitioned to text, reasoning was already printed during the transition
     if SHOW_REASONING_SUMMARY and reasoning_summary.strip() and phase != "text":
-        console.print(Panel.fit(Markdown(reasoning_summary), title="Reasoning Summary", border_style="yellow"))
+        console.print(
+            Panel.fit(
+                Markdown(reasoning_summary),
+                title="Reasoning Summary",
+                border_style="yellow",
+            )
+        )
 
     # Agent text output (streaming only showed tail view)
     if has_text:
@@ -253,7 +268,13 @@ def stream_to_console(
     # Tool calls (when agent makes tool calls without text output)
     if has_tools and not has_text and ai_message:
         names = [tc.get("name", "?") for tc in getattr(ai_message, "tool_calls", [])]
-        console.print(Panel(Text(f"Calling tools: {', '.join(names)}", style="dim"), title=title or "Agent", border_style="dim cyan"))
+        console.print(
+            Panel(
+                Text(f"Calling tools: {', '.join(names)}", style="dim"),
+                title=title or "Agent",
+                border_style="dim cyan",
+            )
+        )
 
     if ai_message is None:
         raise RuntimeError("No message from model")

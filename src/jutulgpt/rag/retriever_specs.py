@@ -41,8 +41,12 @@ def get_retriever_spec(package: str, doc_type: str) -> RetrieverSpec:
 # JutulDarcy – paths resolved from the installed Julia package
 # ---------------------------------------------------------------------------
 
+
 def _get_jutuldarcy_spec(doc_type: str) -> RetrieverSpec:
-    from jutulgpt.rag.package_paths import get_package_docs_path, get_package_examples_path
+    from jutulgpt.rag.package_paths import (
+        get_package_docs_path,
+        get_package_examples_path,
+    )
 
     if doc_type == "docs":
         return RetrieverSpec(
@@ -65,6 +69,7 @@ def _get_jutuldarcy_spec(doc_type: str) -> RetrieverSpec:
 # ---------------------------------------------------------------------------
 # Fimbul – still uses local rag/ copies
 # ---------------------------------------------------------------------------
+
 
 def _get_fimbul_spec(doc_type: str) -> RetrieverSpec:
     from jutulgpt.configuration import PROJECT_ROOT
