@@ -33,17 +33,20 @@ from jutulgpt.cli import (
     stream_to_console,
 )
 from jutulgpt.configuration import (
-    BaseConfiguration,
     CONTEXT_TRIM_THRESHOLD,
     RECENT_MESSAGES_TO_KEEP,
     RECURSION_LIMIT,
+    BaseConfiguration,
     cli_mode,
 )
 from jutulgpt.context import ContextTracker, summarize_conversation
 from jutulgpt.globals import console
 from jutulgpt.logging import SessionLogger, set_session_logger
 from jutulgpt.state import State
-from jutulgpt.utils.model import get_message_text, get_provider_and_model, load_chat_model
+from jutulgpt.utils.model import (
+    get_message_text,
+    load_chat_model,
+)
 
 
 class BaseAgent(ABC):
@@ -73,8 +76,12 @@ class BaseAgent(ABC):
         self.print_chat_output = print_chat_output
         self._logger: Optional[SessionLogger] = None
         self._context_tracker: Optional[ContextTracker] = None
-        self._conversation_summary: str = ""  # Summary of the conversation if summarization has happened
-        self._messages_to_remove: List[RemoveMessage] = []  # Messages to delete from state
+        self._conversation_summary: str = (
+            ""  # Summary of the conversation if summarization has happened
+        )
+        self._messages_to_remove: List[
+            RemoveMessage
+        ] = []  # Messages to delete from state
 
         # Process tools
         if isinstance(tools, ToolNode):
@@ -262,6 +269,7 @@ class BaseAgent(ABC):
 
         system_prompt = self.get_prompt_from_config(config=config)
         from jutulgpt.rag.package_paths import get_package_root
+
         try:
             jutuldarcy_path = str(get_package_root("JutulDarcy"))
         except Exception:
@@ -300,7 +308,11 @@ class BaseAgent(ABC):
             # Log non-streamed responses
             if self._logger and self._logger.enabled:
                 # response.content can be str or list, convert to str for logging
-                content = response.content if isinstance(response.content, str) else str(response.content)
+                content = (
+                    response.content
+                    if isinstance(response.content, str)
+                    else str(response.content)
+                )
                 self._logger.log_assistant(
                     content=content if content else "",
                     title=self.printed_name or "Assistant",
@@ -332,8 +344,6 @@ class BaseAgent(ABC):
     ) -> Runnable:
         """
         Create a prompt runnable from the prompt.
-
-        Note: This is currently not used, but we should movefrom the get_prompt_from_config function to this method
         """
         if prompt is None:
             return RunnableCallable(lambda state: state.messages, name="Prompt")
@@ -453,10 +463,14 @@ class BaseAgent(ABC):
         system_parts = [system_prompt, workspace_message]
 
         if self._conversation_summary:
-            system_parts.append(f"## Previous conversation summary:\n{self._conversation_summary}")
+            system_parts.append(
+                f"## Previous conversation summary:\n{self._conversation_summary}"
+            )
 
         if summarization_happened:
-            system_parts.append("[Context was just summarized. The following messages contain your latest work. Continue with your current task.]")
+            system_parts.append(
+                "[Context was just summarized. The following messages contain your latest work. Continue with your current task.]"
+            )
 
         combined_system_content = "\n\n".join(system_parts)
         messages_list: List[BaseMessage] = [
@@ -467,20 +481,24 @@ class BaseAgent(ABC):
 
         # Update tracker with final list
         if self._context_tracker:
-            self._context_tracker.update(messages_list, summary=self._conversation_summary)
+            self._context_tracker.update(
+                messages_list, summary=self._conversation_summary
+            )
 
         # Trim as safety net (in case summarization didn't compress enough)
         trim_limit = int(configuration.context_window_size * CONTEXT_TRIM_THRESHOLD)
-        final_messages = list(trim_messages(
-            messages_list,
-            max_tokens=trim_limit,
-            strategy="last",
-            token_counter=model,
-            include_system=True,
-            start_on="human",
-            end_on=("human", "tool"),
-            allow_partial=False,
-        ))
+        final_messages = list(
+            trim_messages(
+                messages_list,
+                max_tokens=trim_limit,
+                strategy="last",
+                token_counter=model,
+                include_system=True,
+                start_on="human",
+                end_on=("human", "tool"),
+                allow_partial=False,
+            )
+        )
 
         return final_messages
 
@@ -549,7 +567,9 @@ class BaseAgent(ABC):
         # Update and display context usage before user input
         if self._context_tracker:
             # Re-count with current state (includes model's latest response)
-            self._context_tracker.update(list(state.messages), summary=self._conversation_summary)
+            self._context_tracker.update(
+                list(state.messages), summary=self._conversation_summary
+            )
             self._context_tracker.display(
                 logger=self._logger,
                 show_console=configuration.show_context_usage,
