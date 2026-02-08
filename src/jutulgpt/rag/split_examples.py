@@ -3,7 +3,7 @@ from typing import List
 
 from langchain_core.documents import Document
 
-from jutulgpt.utils import deduplicate_document_chunks, get_file_source
+from jutulgpt.utils.documents import deduplicate_document_chunks, get_file_source
 
 
 def split_examples(document: Document, header_to_split_on: int = 2) -> List[Document]:

@@ -13,12 +13,8 @@ from jutulgpt.configuration import (
 from jutulgpt.julia import get_error_message, get_linting_result, run_code
 from jutulgpt.logging import CodeRunnerEntry, ToolEntry, get_session_logger
 from jutulgpt.state import State
-from jutulgpt.utils import (
-    add_julia_context,
-    fix_imports,
-    get_code_from_response,
-    shorter_simulations,
-)
+from jutulgpt.utils.code_parsing import add_julia_context, get_code_from_response
+from jutulgpt.utils.code_transforms import fix_imports, shorter_simulations
 
 
 def _truncate(text: str, max_length: int = DISPLAY_CONTENT_MAX_LENGTH) -> str:

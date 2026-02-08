@@ -9,7 +9,7 @@ from jutulgpt.cli.cli_colorscheme import colorscheme
 from jutulgpt.globals import console
 from jutulgpt.logging.session import get_session_logger
 from jutulgpt.rag.utils import modify_doc_content
-from jutulgpt.utils import add_julia_context
+from jutulgpt.utils.code_parsing import add_julia_context
 
 from .interactions import (
     Action,

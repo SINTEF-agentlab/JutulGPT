@@ -43,7 +43,7 @@ from jutulgpt.context import ContextTracker, summarize_conversation
 from jutulgpt.globals import console
 from jutulgpt.logging import SessionLogger, set_session_logger
 from jutulgpt.state import State
-from jutulgpt.utils import get_message_text, get_provider_and_model, load_chat_model
+from jutulgpt.utils.model import get_message_text, get_provider_and_model, load_chat_model
 
 
 class BaseAgent(ABC):

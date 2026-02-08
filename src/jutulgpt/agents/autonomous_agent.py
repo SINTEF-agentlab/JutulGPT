@@ -24,7 +24,8 @@ from jutulgpt.tools import (
     run_julia_linter,
     write_to_file,
 )
-from jutulgpt.utils import get_code_from_response, get_message_text
+from jutulgpt.utils.code_parsing import get_code_from_response
+from jutulgpt.utils.model import get_message_text
 
 
 class AutonomousAgent(BaseAgent):

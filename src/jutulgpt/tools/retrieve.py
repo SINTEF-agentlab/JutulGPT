@@ -20,7 +20,7 @@ from jutulgpt.julia import get_function_documentation_from_list_of_funcs
 from jutulgpt.logging import RAGEntry, ToolEntry, get_session_logger
 from jutulgpt.rag.package_paths import get_package_root
 from jutulgpt.rag.retriever_specs import get_retriever_spec
-from jutulgpt.utils import get_file_source
+from jutulgpt.utils.documents import get_file_source
 
 
 def make_retrieve_tool(

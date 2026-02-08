@@ -12,7 +12,7 @@ from jutulgpt.cli import colorscheme, print_to_console
 from jutulgpt.configuration import OUTPUT_TRUNCATION_LIMIT
 from jutulgpt.logging import ToolEntry, get_session_logger
 from jutulgpt.nodes.check_code import _run_julia_code, _run_linter
-from jutulgpt.utils import fix_imports, shorter_simulations
+from jutulgpt.utils.code_transforms import fix_imports, shorter_simulations
 
 
 def _truncate_output(
