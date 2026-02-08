@@ -25,7 +25,7 @@ show_reasoning_summary = true
 # search_type: "similarity", "mmr", or "similarity_score_threshold"
 [retrieval]
 provider = "bm25"
-search_type = "mmr"
+search_type = "mmr" # only applicable for some providers
 
 [retrieval.search_kwargs]
 k = 2
