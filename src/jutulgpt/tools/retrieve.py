@@ -13,13 +13,13 @@ import jutulgpt.rag.retrieval as retrieval
 import jutulgpt.rag.split_examples as split_examples
 from jutulgpt.cli import colorscheme, print_to_console
 from jutulgpt.configuration import (
-    PROJECT_ROOT,
     BaseConfiguration,
     cli_mode,
 )
 from jutulgpt.julia import get_function_documentation_from_list_of_funcs
 from jutulgpt.logging import RAGEntry, ToolEntry, get_session_logger
-from jutulgpt.rag.retriever_specs import RETRIEVER_SPECS
+from jutulgpt.rag.package_paths import get_package_root
+from jutulgpt.rag.retriever_specs import get_retriever_spec
 from jutulgpt.utils import get_file_source
 
 
@@ -55,7 +55,7 @@ def make_retrieve_tool(
         # Retrieve examples
         with retrieval.make_retriever(
             config=config,
-            spec=RETRIEVER_SPECS[doc_key]["examples"],
+            spec=get_retriever_spec(doc_key, "examples"),
             retrieval_params=retrieval.RetrievalParams(
                 search_type=configuration.examples_search_type,
                 search_kwargs=configuration.examples_search_kwargs,
@@ -229,7 +229,7 @@ def grep_search(
     isRegexp: Optional[bool] = False,
 ) -> str:
     try:
-        workspace_path = str(PROJECT_ROOT / "rag" / "jutuldarcy")
+        workspace_path = str(get_package_root("JutulDarcy"))
         cmd_parts = ["grep", "-r", "-n"]
 
         if isRegexp:

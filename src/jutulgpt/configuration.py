@@ -285,11 +285,11 @@ class BaseConfiguration:
     )
 
     retriever_provider: Annotated[
-        Literal["faiss", "chroma"],
+        Literal["bm25", "faiss", "chroma"],
         {"__template_metadata__": {"kind": "retriever"}},
     ] = field(
-        default="chroma",
-        metadata={"description": "The vector store provider to use for retrieval."},
+        default="bm25",
+        metadata={"description": "The retrieval provider to use. 'bm25' uses keyword-based BM25 search (no embeddings needed). 'faiss' and 'chroma' use vector-store retrieval with embeddings."},
     )
 
     examples_search_type: Annotated[

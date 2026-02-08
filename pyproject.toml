@@ -27,6 +27,7 @@ dependencies = [
     "pydantic>=2.11.7",
     "pygraphviz>=1.14",
     "python-dotenv>=1.1.1",
+    "rank-bm25>=0.2.2",
     "rich>=14.1.0",
     "ruff>=0.12.4",
     "transformers>=4.53.3",

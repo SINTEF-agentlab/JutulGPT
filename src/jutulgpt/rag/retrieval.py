@@ -2,13 +2,10 @@ import os
 from contextlib import contextmanager
 from typing import Generator, TypedDict
 
-# from langchain.retrievers import ContextualCompressionRetriever
-# from langchain.retrievers.document_compressors import FlashrankRerank
 from langchain_core.embeddings import Embeddings
 from langchain_core.runnables import RunnableConfig
 from langchain_core.vectorstores import VectorStoreRetriever
 
-# from langchain_core.documents import BaseDocumentCompressor
 from jutulgpt.configuration import BaseConfiguration
 from jutulgpt.rag.retriever_specs import RetrieverSpec
 from jutulgpt.utils import get_provider_and_model
@@ -37,36 +34,45 @@ def make_text_encoder(model: str) -> Embeddings:
 
 
 def _load_and_split_docs(spec: RetrieverSpec) -> list:
+    """Load documents from *spec.dir_path*, split them, and return chunks.
+
+    If *spec.cache_path* is set and the cache file exists, the raw documents
+    are loaded from the pickle cache.  Otherwise they are loaded from disk via
+    :class:`DirectoryLoader` (and optionally cached for next time).
+    """
     import pickle
 
     from langchain_community.document_loaders import DirectoryLoader, TextLoader
 
-    # Load or cache documents
     if isinstance(spec.filetype, str):
         filetypes = [spec.filetype]
     else:
         filetypes = spec.filetype
 
-    loaders = []
-    for filetype in filetypes:
-        loader = DirectoryLoader(
-            path=spec.dir_path,
-            glob=f"**/*.{filetype}",
-            show_progress=True,
-            loader_cls=TextLoader,
-        )
-        loaders.append(loader)
-
-    if os.path.exists(spec.cache_path):
+    # Try loading from cache first (only when a cache_path is configured)
+    if spec.cache_path and os.path.exists(spec.cache_path):
         with open(spec.cache_path, "rb") as f:
             docs = pickle.load(f)
     else:
+        loaders = []
+        for filetype in filetypes:
+            loader = DirectoryLoader(
+                path=spec.dir_path,
+                glob=f"**/*.{filetype}",
+                show_progress=True,
+                loader_cls=TextLoader,
+            )
+            loaders.append(loader)
+
         docs = []
         for loader in loaders:
             docs.extend(loader.load())
 
-        with open(spec.cache_path, "wb") as f:
-            pickle.dump(docs, f)
+        # Persist to cache if a cache_path was given
+        if spec.cache_path:
+            os.makedirs(os.path.dirname(spec.cache_path), exist_ok=True)
+            with open(spec.cache_path, "wb") as f:
+                pickle.dump(docs, f)
 
     # Split documents
     chunks = []
@@ -74,6 +80,32 @@ def _load_and_split_docs(spec: RetrieverSpec) -> list:
         chunks.extend(spec.split_func(doc))
     return chunks
 
+
+# ---------------------------------------------------------------------------
+# BM25 retriever (no embeddings, no persistence)
+# ---------------------------------------------------------------------------
+
+@contextmanager
+def make_bm25_retriever(
+    spec: RetrieverSpec,
+    search_kwargs: dict,
+) -> Generator:
+    """Create a BM25 retriever from the documents in *spec*.
+
+    Documents are loaded and split on every call (fast for typical doc sizes).
+    No embeddings or vector store are required.
+    """
+    from langchain_community.retrievers import BM25Retriever
+
+    docs = _load_and_split_docs(spec)
+    k = search_kwargs.get("k", 3)
+    retriever = BM25Retriever.from_documents(docs, k=k)
+    yield retriever
+
+
+# ---------------------------------------------------------------------------
+# Vector-store retrievers (FAISS / Chroma) – kept for backward-compatibility
+# ---------------------------------------------------------------------------
 
 @contextmanager
 def make_faiss_retriever(
@@ -127,7 +159,7 @@ def make_chroma_retriever(
     search_kwargs: dict,
 ) -> Generator[VectorStoreRetriever, None, None]:
     """
-    Create or load a FAISS retriever, saving the index locally to avoid re-indexing.
+    Create or load a Chroma retriever, saving the index locally to avoid re-indexing.
     Uses configuration to determine file paths and splitting functions.
     """
     import os
@@ -139,7 +171,7 @@ def make_chroma_retriever(
         get_provider_and_model(configuration.embedding_model)[0]
     )
 
-    # Load or create FAISS index
+    # Load or create Chroma index
     if os.path.exists(persist_path):
         vectorstore = Chroma(
             embedding_function=embedding_model,
@@ -164,16 +196,6 @@ def make_chroma_retriever(
     )
 
 
-# def apply_flash_reranker(
-#     configuration: BaseConfiguration, retriever: VectorStoreRetriever
-# ):
-#     compressor = FlashrankRerank(**configuration.rerank_kwargs)
-#
-#     return ContextualCompressionRetriever(
-#         base_compressor=compressor, base_retriever=retriever
-#     )
-
-
 @contextmanager
 def make_retriever(
     config: RunnableConfig,
@@ -182,23 +204,29 @@ def make_retriever(
         search_type="mmr",
         search_kwargs={"k": 3, "fetch_k": 15, "lambda_mult": 0.5},
     ),
-) -> Generator[VectorStoreRetriever, None, None]:
+) -> Generator:
     """
     Create a retriever for the agent, based on the current configuration.
 
     Args:
         config: The runnable configuration
         spec: The retriever specification
-        **retrieval_overrides: Override any retrieval parameters (search_type, search_kwargs, etc.)
+        retrieval_params: Override retrieval parameters (search_type, search_kwargs, etc.)
     """
     configuration = BaseConfiguration.from_runnable_config(config)
-
-    embedding_model = make_text_encoder(configuration.embedding_model)
 
     # Get the retriever
     selected_retriever = None
     match configuration.retriever_provider:
+        case "bm25":
+            with make_bm25_retriever(
+                spec,
+                retrieval_params["search_kwargs"],
+            ) as retriever:
+                selected_retriever = retriever
+
         case "faiss":
+            embedding_model = make_text_encoder(configuration.embedding_model)
             with make_faiss_retriever(
                 configuration,
                 spec,
@@ -208,6 +236,7 @@ def make_retriever(
             ) as retriever:
                 selected_retriever = retriever
         case "chroma":
+            embedding_model = make_text_encoder(configuration.embedding_model)
             with make_chroma_retriever(
                 configuration,
                 spec,

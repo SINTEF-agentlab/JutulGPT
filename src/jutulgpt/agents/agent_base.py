@@ -35,7 +35,6 @@ from jutulgpt.cli import (
 from jutulgpt.configuration import (
     BaseConfiguration,
     CONTEXT_TRIM_THRESHOLD,
-    PROJECT_ROOT,
     RECENT_MESSAGES_TO_KEEP,
     RECURSION_LIMIT,
     cli_mode,
@@ -262,7 +261,12 @@ class BaseAgent(ABC):
         configuration = BaseConfiguration.from_runnable_config(config=config)
 
         system_prompt = self.get_prompt_from_config(config=config)
-        workspace_message = f"**Current workspace:** {os.getcwd()} \n**JutulDarcy documentation and examples can be found at:** {str(PROJECT_ROOT / 'rag' / 'jutuldarcy')}"
+        from jutulgpt.rag.package_paths import get_package_root
+        try:
+            jutuldarcy_path = str(get_package_root("JutulDarcy"))
+        except Exception:
+            jutuldarcy_path = "(unable to resolve – is JutulDarcy installed?)"
+        workspace_message = f"**Current workspace:** {os.getcwd()} \n**JutulDarcy documentation and examples are read from the installed package at:** {jutuldarcy_path}"
 
         # Initialize context tracker
         if self._context_tracker is None:
