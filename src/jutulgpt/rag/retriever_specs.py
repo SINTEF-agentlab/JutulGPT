@@ -1,94 +1,87 @@
-"""
-File for defining the specifics related to the different retrievers. Gives flexibility to vary the splitting functions etc.
+"""Retriever specifications for different document sets.
+
+JutulDarcy specs resolve paths lazily from the installed Julia package so they
+always stay in sync with the version the user has installed.
 """
 
 from dataclasses import dataclass
-from functools import partial
-from typing import Callable, Union
+from functools import lru_cache, partial
+from typing import Callable, Optional, Union
 
-from jutulgpt.configuration import PROJECT_ROOT
 from jutulgpt.rag import split_docs, split_examples
 
 
 @dataclass
 class RetrieverSpec:
     dir_path: str
-    persist_path: Callable  # Callable as we want to change where we store when we modify the embedding model in the configuration.
-    cache_path: str
-    collection_name: str
-    filetype: Union[str, list[str]]  # Can be a single filetype or a list of filetypes.
+    filetype: Union[str, list[str]]
     split_func: Callable
+    # Only needed for vector-store retrievers (not BM25):
+    persist_path: Optional[Callable] = None
+    cache_path: Optional[str] = None
+    collection_name: Optional[str] = None
 
 
-RETRIEVER_SPECS = {
-    "jutuldarcy": {
-        "docs": RetrieverSpec(
-            dir_path=str(PROJECT_ROOT / "rag" / "jutuldarcy" / "docs" / "man"),
-            persist_path=lambda retriever_dir_name: str(
-                PROJECT_ROOT
-                / "rag"
-                / "retriever_store"
-                / f"retriever_jutuldarcy_docs_{retriever_dir_name}"
-            ),
-            cache_path=str(
-                PROJECT_ROOT / "rag" / "loaded_store" / "loaded_jutuldarcy_docs.pkl"
-            ),
-            collection_name="jutuldarcy_docs",
+@lru_cache(maxsize=None)
+def get_retriever_spec(package: str, doc_type: str) -> RetrieverSpec:
+    """Return a :class:`RetrieverSpec`, resolving package paths lazily.
+
+    The first call for a given *(package, doc_type)* pair triggers a Julia
+    subprocess to locate the installed package; subsequent calls return the
+    cached result instantly.
+    """
+    if package == "jutuldarcy":
+        return _get_jutuldarcy_spec(doc_type)
+    elif package == "fimbul":
+        return _get_fimbul_spec(doc_type)
+    raise ValueError(f"Unknown package: {package}")
+
+
+# ---------------------------------------------------------------------------
+# JutulDarcy – paths resolved from the installed Julia package
+# ---------------------------------------------------------------------------
+
+def _get_jutuldarcy_spec(doc_type: str) -> RetrieverSpec:
+    from jutulgpt.rag.package_paths import get_package_docs_path, get_package_examples_path
+
+    if doc_type == "docs":
+        return RetrieverSpec(
+            dir_path=get_package_docs_path("JutulDarcy"),
             filetype="md",
             split_func=split_docs.split_docs,
-        ),
-        "examples": RetrieverSpec(
-            dir_path=str(PROJECT_ROOT / "rag" / "jutuldarcy" / "examples"),
-            persist_path=lambda retriever_dir_name: str(
-                PROJECT_ROOT
-                / "rag"
-                / "retriever_store"
-                / f"retriever_jutuldarcy_examples_{retriever_dir_name}"
-            ),
-            cache_path=str(
-                PROJECT_ROOT / "rag" / "loaded_store" / "loaded_jutuldarcy_examples.pkl"
-            ),
-            collection_name="jutuldarcy_examples",
+        )
+    elif doc_type == "examples":
+        return RetrieverSpec(
+            dir_path=get_package_examples_path("JutulDarcy"),
             filetype="jl",
             split_func=partial(
                 split_examples.split_examples,
                 header_to_split_on=1,  # Split on `# #`
             ),
-        ),
-    },
-    "fimbul": {
-        "docs": RetrieverSpec(
+        )
+    raise ValueError(f"Unknown doc_type for jutuldarcy: {doc_type}")
+
+
+# ---------------------------------------------------------------------------
+# Fimbul – still uses local rag/ copies
+# ---------------------------------------------------------------------------
+
+def _get_fimbul_spec(doc_type: str) -> RetrieverSpec:
+    from jutulgpt.configuration import PROJECT_ROOT
+
+    if doc_type == "docs":
+        return RetrieverSpec(
             dir_path=str(PROJECT_ROOT / "rag" / "fimbul" / "docs" / "man"),
-            persist_path=lambda retriever_dir_name: str(
-                PROJECT_ROOT
-                / "rag"
-                / "retriever_store"
-                / f"retriever_fimbul_docs_{retriever_dir_name}"
-            ),
-            cache_path=str(
-                PROJECT_ROOT / "rag" / "loaded_store" / "loaded_fimbul_docs.pkl"
-            ),
-            collection_name="fimbul_docs",
             filetype="md",
             split_func=split_docs.split_docs,
-        ),
-        "examples": RetrieverSpec(
+        )
+    elif doc_type == "examples":
+        return RetrieverSpec(
             dir_path=str(PROJECT_ROOT / "rag" / "fimbul" / "examples"),
-            persist_path=lambda retriever_dir_name: str(
-                PROJECT_ROOT
-                / "rag"
-                / "retriever_store"
-                / f"retriever_fimbul_examples_{retriever_dir_name}"
-            ),
-            cache_path=str(
-                PROJECT_ROOT / "rag" / "loaded_store" / "loaded_fimbul_examples.pkl"
-            ),
-            collection_name="fimbul_examples",
             filetype="jl",
             split_func=partial(
                 split_examples.split_examples,
                 header_to_split_on=1,  # Split on `# #`
             ),
-        ),
-    },
-}
+        )
+    raise ValueError(f"Unknown doc_type for fimbul: {doc_type}")

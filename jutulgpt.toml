@@ -1,0 +1,71 @@
+# JutulGPT Configuration
+# ──────────────────────
+# This file holds user-configurable settings for the JutulGPT agent.
+# Values here override Python defaults.  CLI flags (e.g. --model) override
+# values in this file.  Delete or comment out any key to fall back to its
+# Python default.
+
+# ── Mode ─────────────────────────────────────────────────────────────────
+# Only one of cli / mcp should be true at a time.
+[mode]
+cli = true
+mcp = false
+
+# ── Model ────────────────────────────────────────────────────────────────
+# preset: Name of the model preset.  CLI --model overrides this.
+# Supported presets:
+#   gpt-4.1, gpt-5-mini, gpt-5-mini-reasoning, gpt-5.1, gpt-5.1-reasoning,
+#   gpt-5.2, gpt-5.2-reasoning, qwen3:14b, qwen3:14b-thinking
+[model]
+preset = "gpt-5.2-reasoning"
+show_reasoning_summary = true
+
+# ── Retrieval ────────────────────────────────────────────────────────────
+# provider: "bm25", "faiss", or "chroma"
+# search_type: "similarity", "mmr", or "similarity_score_threshold"
+[retrieval]
+provider = "bm25"
+search_type = "mmr"
+
+[retrieval.search_kwargs]
+k = 2
+fetch_k = 10
+lambda_mult = 0.5
+
+# Reranking: "None" (disabled) or "flash"
+[retrieval.rerank]
+provider = "None"
+
+# ── Human Interaction ────────────────────────────────────────────────────
+# Control which steps require human approval.
+[human_interaction]
+rag_query = false
+retrieved_examples = false
+code_check = true
+fix_error = true
+
+# ── Display ──────────────────────────────────────────────────────────────
+# Max characters shown in console / log output (not context management).
+[display]
+content_max_length = 800
+
+# ── Context Management ───────────────────────────────────────────────────
+# Thresholds are fractions of the model's context window.
+[context]
+usage_threshold = 0.7        # Trigger summarization
+trim_threshold = 0.9         # Safety trim if summarization didn't compress enough
+display_threshold = 0.3      # Show context-usage display above this fraction
+recent_messages_to_keep = 10 # Messages preserved when summarizing
+recursion_limit = 200        # Max LangGraph recursions before error
+
+# ── Output Truncation ───────────────────────────────────────────────────
+[output]
+truncation_limit = 8000  # Guards against large outputs filling context
+summary_msg_limit = 1000 # Max chars per message when summarizing
+
+# ── Logging ──────────────────────────────────────────────────────────────
+[logging]
+enabled = true
+dir = "output/logs"
+filename_prefix = "agent_output"
+version_info = true

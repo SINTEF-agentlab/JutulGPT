@@ -22,13 +22,15 @@ from langchain_core.runnables import RunnableConfig, ensure_config
 from pydantic import BaseModel, ConfigDict
 
 from jutulgpt import prompts
+from jutulgpt.config_loader import load_config, get
+
+# ── Load TOML configuration (empty dict when file is absent) ─────────────
+_cfg = load_config()
 
 # Static settings.
 # NOTE: Currently only one of these can be true at a time
-cli_mode: bool = True  # If the agent is run from using the CLI
-mcp_mode: bool = (
-    False  # If the agent is run as an MPC server that can be called from VSCode
-)
+cli_mode: bool = get(_cfg, "mode", "cli", default=True)
+mcp_mode: bool = get(_cfg, "mode", "mcp", default=False)
 assert not (cli_mode and mcp_mode), "cli_mode and mcp_mode cannot both be true."
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -160,16 +162,37 @@ OLLAMA_QWEN3_14B = ModelConfig(
     },
 )
 
+# Mapping from preset name → ModelConfig (used for TOML + CLI resolution)
+MODEL_PRESETS: dict[str, ModelConfig] = {
+    "gpt-4.1": OPENAI_GPT_4_1,
+    "gpt-5-mini": OPENAI_GPT_5_MINI,
+    "gpt-5-mini-reasoning": OPENAI_GPT_5_MINI_REASONING,
+    "gpt-5.1": OPENAI_GPT_5_1,
+    "gpt-5.1-reasoning": OPENAI_GPT_5_1_REASONING,
+    "gpt-5.2": OPENAI_GPT_5_2,
+    "gpt-5.2-reasoning": OPENAI_GPT_5_2_REASONING,
+    "qwen3:14b": OLLAMA_QWEN3_14B,
+    "qwen3:14b-thinking": OLLAMA_QWEN3_14B_THINKING,
+}
+
+
+def _resolve_preset(name: str) -> ModelConfig:
+    """Look up a preset name in MODEL_PRESETS, falling back to the default."""
+    key = name.strip().lower().replace("_", "-")
+    if key in MODEL_PRESETS:
+        return MODEL_PRESETS[key]
+    return OPENAI_GPT_5_2_REASONING
+
 
 # ┌──────────────────────────────────────────────────────────────────────────────┐
-# │  MODEL CONFIGURATION - Change these values to switch models                  │
-# │  DEFAULT_MODEL_PRESET is used by the CLI when you omit --model.              │
+# │  MODEL CONFIGURATION                                                        │
+# │  Read from jutulgpt.toml [model].preset, with CLI --model overriding.       │
 # └──────────────────────────────────────────────────────────────────────────────┘
-DEFAULT_MODEL_PRESET: str = "gpt-5.2-reasoning"
-ACTIVE_MODEL_CONFIG: ModelConfig = OPENAI_GPT_5_2_REASONING
+DEFAULT_MODEL_PRESET: str = get(_cfg, "model", "preset", default="gpt-5.2-reasoning")
+ACTIVE_MODEL_CONFIG: ModelConfig = _resolve_preset(DEFAULT_MODEL_PRESET)
 
 # Print/log the reasoning summary blocks (if returned by OpenAI)
-SHOW_REASONING_SUMMARY: bool = True
+SHOW_REASONING_SUMMARY: bool = get(_cfg, "model", "show_reasoning_summary", default=True)
 
 ACTIVE_PROVIDER: Literal["ollama", "openai"] = ACTIVE_MODEL_CONFIG.provider
 ACTIVE_MODEL_NAME: str = ACTIVE_MODEL_CONFIG.model
@@ -184,10 +207,10 @@ _EMBEDDING_MODEL_BY_PROVIDER: dict[str, str] = {
 }
 EMBEDDING_MODEL_NAME: str = _EMBEDDING_MODEL_BY_PROVIDER[ACTIVE_PROVIDER]
 
-RECURSION_LIMIT = 200  # Number of recursions before an error is thrown.
+RECURSION_LIMIT = get(_cfg, "context", "recursion_limit", default=200)
 
 # Display settings - for console and log output (not context management)
-DISPLAY_CONTENT_MAX_LENGTH = 800  # Max chars to display in console/logs
+DISPLAY_CONTENT_MAX_LENGTH = get(_cfg, "display", "content_max_length", default=800)
 
 # Context management settings
 # ┌─────────────────────────────────────────────────────────────────┐
@@ -202,14 +225,14 @@ DISPLAY_CONTENT_MAX_LENGTH = 800  # Max chars to display in console/logs
 # │  └── CONTEXT_TRIM_THRESHOLD (0.9)  → safety trim if needed      │
 # └─────────────────────────────────────────────────────────────────┘
 MODEL_CONTEXT_WINDOW = ACTIVE_MODEL_CONFIG.context_window  # Total context budget in tokens
-CONTEXT_USAGE_THRESHOLD = 0.7  # Summarization trigger threshold
-CONTEXT_TRIM_THRESHOLD = 0.9  # Safety trim threshold (if summarization didn't compress enough)
-CONTEXT_DISPLAY_THRESHOLD = 0.3  # Show context usage display threshold
-RECENT_MESSAGES_TO_KEEP = 10  # Messages to preserve when summarizing
+CONTEXT_USAGE_THRESHOLD = get(_cfg, "context", "usage_threshold", default=0.7)
+CONTEXT_TRIM_THRESHOLD = get(_cfg, "context", "trim_threshold", default=0.9)
+CONTEXT_DISPLAY_THRESHOLD = get(_cfg, "context", "display_threshold", default=0.3)
+RECENT_MESSAGES_TO_KEEP = get(_cfg, "context", "recent_messages_to_keep", default=10)
 
 # Truncation limits (chars)
-OUTPUT_TRUNCATION_LIMIT = 8000  # Guards against large outputs filling context
-SUMMARY_MSG_LIMIT = 1000  # Guards against large messages filling context when summarizing
+OUTPUT_TRUNCATION_LIMIT = get(_cfg, "output", "truncation_limit", default=8000)
+SUMMARY_MSG_LIMIT = get(_cfg, "output", "summary_msg_limit", default=1000)
 
 
 # Setup of the environment and some logging. Not neccessary to touch this.
@@ -233,23 +256,23 @@ logging.getLogger("faiss").setLevel(logging.WARNING)
 class HumanInteraction(BaseModel):
     model_config = ConfigDict(extra="forbid")  # optional strictness
     rag_query: bool = field(
-        default=False,
+        default_factory=lambda: get(_cfg, "human_interaction", "rag_query", default=False),
         metadata={"description": "Whether to modify the generated RAG query."},
     )
     retrieved_examples: bool = field(
-        default=False,
+        default_factory=lambda: get(_cfg, "human_interaction", "retrieved_examples", default=False),
         metadata={
             "description": "Whether to verify and filter the retrieved examples."
         },
     )
     code_check: bool = field(
-        default=True,
+        default_factory=lambda: get(_cfg, "human_interaction", "code_check", default=True),
         metadata={
             "description": "Whether to perform code checks on the generated code."
         },
     )
     fix_error: bool = field(
-        default=True,
+        default_factory=lambda: get(_cfg, "human_interaction", "fix_error", default=True),
         metadata={
             "description": "Whether to decide to try to fix errors in the generated code."
         },
@@ -285,25 +308,25 @@ class BaseConfiguration:
     )
 
     retriever_provider: Annotated[
-        Literal["faiss", "chroma"],
+        Literal["bm25", "faiss", "chroma"],
         {"__template_metadata__": {"kind": "retriever"}},
     ] = field(
-        default="chroma",
-        metadata={"description": "The vector store provider to use for retrieval."},
+        default_factory=lambda: get(_cfg, "retrieval", "provider", default="bm25"),
+        metadata={"description": "The retrieval provider to use. 'bm25' uses keyword-based BM25 search (no embeddings needed). 'faiss' and 'chroma' use vector-store retrieval with embeddings."},
     )
 
     examples_search_type: Annotated[
         Literal["similarity", "mmr", "similarity_score_threshold"],
         {"__template_metadata__": {"kind": "reranker"}},
     ] = field(
-        default="mmr",
+        default_factory=lambda: get(_cfg, "retrieval", "search_type", default="mmr"),
         metadata={
             "description": "Defines the type of search that the retriever should perform."
         },
     )
 
     examples_search_kwargs: dict[str, Any] = field(
-        default_factory=lambda: {"k": 2, "fetch_k": 10, "lambda_mult": 0.5},
+        default_factory=lambda: get(_cfg, "retrieval", "search_kwargs", default={"k": 2, "fetch_k": 10, "lambda_mult": 0.5}),
         metadata={
             "description": "Additional keyword arguments to pass to the search function of the retriever. See langgraph documentation for details about what kwargs works for the different search types. See https://python.langchain.com/api_reference/chroma/vectorstores/langchain_chroma.vectorstores.Chroma.html#langchain_chroma.vectorstores.Chroma.as_retriever"
         },
@@ -313,7 +336,7 @@ class BaseConfiguration:
         Literal["None", "flash"],
         {"__template_metadata__": {"kind": "reranker"}},
     ] = field(
-        default="None",
+        default_factory=lambda: get(_cfg, "retrieval", "rerank", "provider", default="None"),
         metadata={
             "description": "The provider user for reranking the retrieved documents."
         },
@@ -350,23 +373,23 @@ class BaseConfiguration:
 
     # Logging
     log_to_file: bool = field(
-        default=True,
+        default_factory=lambda: get(_cfg, "logging", "enabled", default=True),
         metadata={
             "description": "Enable writing assistant I/O to a session Markdown log."
         },
     )
     log_dir: str = field(
-        default="output/logs",
+        default_factory=lambda: get(_cfg, "logging", "dir", default="output/logs"),
         metadata={
             "description": "Directory where session logs are stored (auto-created)."
         },
     )
     log_filename_prefix: str = field(
-        default="agent_output",
+        default_factory=lambda: get(_cfg, "logging", "filename_prefix", default="agent_output"),
         metadata={"description": "Prefix for per-session log filenames."},
     )
     log_version_info: bool = field(
-        default=True,
+        default_factory=lambda: get(_cfg, "logging", "version_info", default=True),
         metadata={
             "description": "Include Julia/Jutul/JutulDarcy versions in log header."
         },
@@ -386,13 +409,13 @@ class BaseConfiguration:
         },
     )
     context_summarize_threshold: float = field(
-        default=CONTEXT_USAGE_THRESHOLD,
+        default_factory=lambda: CONTEXT_USAGE_THRESHOLD,
         metadata={
             "description": "Fraction of context at which to start summarizing (0.0-1.0)."
         },
     )
     context_display_threshold: float = field(
-        default=CONTEXT_DISPLAY_THRESHOLD,
+        default_factory=lambda: CONTEXT_DISPLAY_THRESHOLD,
         metadata={
             "description": "Only show context display when usage exceeds this fraction (0.0-1.0)."
         },

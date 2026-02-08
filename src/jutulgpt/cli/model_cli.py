@@ -20,22 +20,8 @@ def resolve_model_config(name: str) -> cfg.ModelConfig:
     """Resolve a CLI `--model` string to a `ModelConfig` preset."""
     key = _normalize_model_name(name)
 
-    presets: dict[str, cfg.ModelConfig] = {
-        # OpenAI
-        "gpt-4.1": cfg.OPENAI_GPT_4_1,
-        "gpt-5-mini": cfg.OPENAI_GPT_5_MINI,
-        "gpt-5-mini-reasoning": cfg.OPENAI_GPT_5_MINI_REASONING,
-        "gpt-5.1": cfg.OPENAI_GPT_5_1,
-        "gpt-5.1-reasoning": cfg.OPENAI_GPT_5_1_REASONING,
-        "gpt-5.2": cfg.OPENAI_GPT_5_2,
-        "gpt-5.2-reasoning": cfg.OPENAI_GPT_5_2_REASONING,
-        # Ollama / Qwen
-        "qwen3:14b": cfg.OLLAMA_QWEN3_14B,
-        "qwen3:14b-thinking": cfg.OLLAMA_QWEN3_14B_THINKING,
-    }
-
-    if key in presets:
-        return presets[key]
+    if key in cfg.MODEL_PRESETS:
+        return cfg.MODEL_PRESETS[key]
 
     # Also allow passing a raw fully-qualified model like "openai:gpt-4.1"
     # (will fall back to minimal defaults elsewhere).
@@ -46,7 +32,7 @@ def resolve_model_config(name: str) -> cfg.ModelConfig:
             return cfg.ModelConfig(provider=provider, model=model.strip())
 
     raise ValueError(
-        f"Unknown model '{name}'. Supported: {', '.join(sorted(presets.keys()))}"
+        f"Unknown model '{name}'. Supported: {', '.join(sorted(cfg.MODEL_PRESETS.keys()))}"
     )
 
 
