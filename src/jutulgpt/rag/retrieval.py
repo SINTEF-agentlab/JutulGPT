@@ -59,7 +59,7 @@ def _load_and_split_docs(spec: RetrieverSpec) -> list:
             loader = DirectoryLoader(
                 path=spec.dir_path,
                 glob=f"**/*.{filetype}",
-                show_progress=True,
+                show_progress=False,
                 loader_cls=TextLoader,
             )
             loaders.append(loader)
@@ -85,6 +85,7 @@ def _load_and_split_docs(spec: RetrieverSpec) -> list:
 # BM25 retriever (no embeddings, no persistence)
 # ---------------------------------------------------------------------------
 
+
 @contextmanager
 def make_bm25_retriever(
     spec: RetrieverSpec,
@@ -106,6 +107,7 @@ def make_bm25_retriever(
 # ---------------------------------------------------------------------------
 # Vector-store retrievers (FAISS / Chroma) – kept for backward-compatibility
 # ---------------------------------------------------------------------------
+
 
 @contextmanager
 def make_faiss_retriever(
