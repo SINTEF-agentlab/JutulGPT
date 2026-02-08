@@ -1,6 +1,5 @@
 """Model loading and message utilities."""
 
-from dataclasses import asdict
 from typing import List, Sequence, Union
 
 from langchain.chat_models import init_chat_model
@@ -106,20 +105,3 @@ def get_tool_message(messages: List, n_last=2, print=False):
                 message.pretty_print()
             return message
     return None
-
-
-def state_to_dict(state, remove_keys: List[str] = []) -> dict:
-    """
-    Convert a State object to a dictionary, optionally removing specified keys.
-
-    Args:
-        state: The State object to convert.
-        remove_keys (List[str]): Keys to remove from the resulting dictionary.
-
-    Returns:
-        dict: Dictionary representation of the state with specified keys removed.
-    """
-    state_dict = asdict(state)
-    for key in remove_keys:
-        state_dict.pop(key, None)
-    return state_dict

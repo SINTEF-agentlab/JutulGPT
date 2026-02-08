@@ -28,14 +28,12 @@ from jutulgpt.utils.documents import (
     _get_relevant_part_of_file_source,
     deduplicate_document_chunks,
     get_file_source,
-    load_lines_from_txt,
 )
 from jutulgpt.utils.model import (
     get_message_text,
     get_provider_and_model,
     get_tool_message,
     load_chat_model,
-    state_to_dict,
     trim_state_messages,
 )
 
@@ -59,12 +57,10 @@ __all__ = [
     "_get_relevant_part_of_file_source",
     "deduplicate_document_chunks",
     "get_file_source",
-    "load_lines_from_txt",
     # model
     "get_message_text",
     "get_provider_and_model",
     "get_tool_message",
     "load_chat_model",
-    "state_to_dict",
     "trim_state_messages",
 ]
