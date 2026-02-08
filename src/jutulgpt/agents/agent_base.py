@@ -43,6 +43,7 @@ from jutulgpt.context import ContextTracker, summarize_conversation
 from jutulgpt.globals import console
 from jutulgpt.logging import SessionLogger, set_session_logger
 from jutulgpt.state import State
+from jutulgpt.utils.code_parsing import get_code_from_response
 from jutulgpt.utils.model import (
     get_message_text,
     load_chat_model,
@@ -552,13 +553,32 @@ class BaseAgent(ABC):
         updates.append(response)
         return updates
 
-    def call_model(self, state: state.State, config: RunnableConfig) -> dict:
+    def call_model(self, state: State, config: RunnableConfig) -> dict:
         """Call the model with the current state."""
+
         response = self.invoke_model(state=state, config=config)
+
+        # Check if we need more steps
+        if self._are_more_steps_needed(state, response):
+            fallback = AIMessage(
+                id=response.id,
+                content="Sorry, need more steps to process this request.",
+            )
+            return {"messages": self._finalize_context(fallback)}
+
+        # With OpenAI Responses API, response.content may be a list of content blocks.
+        # Always use the normalized text view for downstream parsing.
+        response_text = get_message_text(response)
+        code_block = get_code_from_response(response=response_text)
 
         # Finalize context: bundle response with any pending state changes
         messages = self._finalize_context(response)
-        return {"messages": messages}
+        return {
+            "messages": messages,
+            "code_block": code_block,
+            "error": False,
+            "mcp_answer": response_text,
+        }
 
     def get_user_input(self, state: state.State, config: RunnableConfig) -> dict:
         """Get user input for standalone mode."""

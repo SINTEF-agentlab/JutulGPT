@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any, Callable, Literal, Optional, Sequence, Union
 
 from langchain_core.language_models import LanguageModelLike
-from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, StateGraph
@@ -21,8 +20,6 @@ from jutulgpt.tools import (
     retrieve_jutuldarcy_examples,
     write_to_file,
 )
-from jutulgpt.utils.code_parsing import get_code_from_response
-from jutulgpt.utils.model import get_message_text
 
 
 class Agent(BaseAgent):
@@ -122,28 +119,6 @@ class Agent(BaseAgent):
         """
         configuration = BaseConfiguration.from_runnable_config(config)
         return configuration.agent_prompt
-
-    def call_model(self, state: State, config: RunnableConfig) -> dict:
-        """Call the model with the current state."""
-
-        response = self.invoke_model(state=state, config=config)
-
-        # Check if we need more steps
-        if self._are_more_steps_needed(state, response):
-            fallback = AIMessage(
-                id=response.id,
-                content="Sorry, need more steps to process this request.",
-            )
-            return {"messages": self._finalize_context(fallback)}
-
-        # With OpenAI Responses API, response.content may be a list of content blocks.
-        # Always use the normalized text view for downstream parsing.
-        response_text = get_message_text(response)
-        code_block = get_code_from_response(response=response_text)
-
-        # Finalize context: bundle response with any pending state changes
-        messages = self._finalize_context(response)
-        return {"messages": messages, "code_block": code_block, "error": False}
 
     def finalize(self, state: State, config: RunnableConfig):
         return {}
