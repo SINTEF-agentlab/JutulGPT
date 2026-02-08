@@ -23,6 +23,8 @@ from langchain_core.runnables import (
 )
 from langchain_core.tools import BaseTool
 from langgraph.errors import ErrorCode, create_error_message
+from langgraph.graph import StateGraph
+from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.utils.runnable import RunnableCallable
 
@@ -33,17 +35,22 @@ from jutulgpt.cli import (
     stream_to_console,
 )
 from jutulgpt.configuration import (
-    BaseConfiguration,
     CONTEXT_TRIM_THRESHOLD,
     RECENT_MESSAGES_TO_KEEP,
     RECURSION_LIMIT,
+    BaseConfiguration,
     cli_mode,
+    mcp_mode,
 )
 from jutulgpt.context import ContextTracker, summarize_conversation
 from jutulgpt.globals import console
 from jutulgpt.logging import SessionLogger, set_session_logger
-from jutulgpt.state import State
-from jutulgpt.utils import get_message_text, get_provider_and_model, load_chat_model
+from jutulgpt.state import MCPInputState, MCPOutputState, State
+from jutulgpt.utils.code_parsing import get_code_from_response
+from jutulgpt.utils.model import (
+    get_message_text,
+    load_chat_model,
+)
 
 
 class BaseAgent(ABC):
@@ -73,8 +80,12 @@ class BaseAgent(ABC):
         self.print_chat_output = print_chat_output
         self._logger: Optional[SessionLogger] = None
         self._context_tracker: Optional[ContextTracker] = None
-        self._conversation_summary: str = ""  # Summary of the conversation if summarization has happened
-        self._messages_to_remove: List[RemoveMessage] = []  # Messages to delete from state
+        self._conversation_summary: str = (
+            ""  # Summary of the conversation if summarization has happened
+        )
+        self._messages_to_remove: List[
+            RemoveMessage
+        ] = []  # Messages to delete from state
 
         # Process tools
         if isinstance(tools, ToolNode):
@@ -204,6 +215,34 @@ class BaseAgent(ABC):
         """
         pass
 
+    def _initialize_workflow(self):
+        if mcp_mode:
+            workflow = StateGraph(
+                self.state_schema,
+                input_schema=MCPInputState,
+                output_schema=MCPOutputState,
+                config_schema=BaseConfiguration,
+            )
+        else:
+            workflow = StateGraph(
+                self.state_schema,
+                config_schema=BaseConfiguration,
+            )
+        return workflow
+
+    def _configure_entry_point(self, workflow):
+        if mcp_mode:
+            workflow.add_node("mcp_input", self.state_from_mcp_input)
+            workflow.set_entry_point("mcp_input")
+            workflow.add_edge("mcp_input", "agent")
+        elif cli_mode:
+            workflow.add_node("get_user_input", self.get_user_input)
+            workflow.set_entry_point("get_user_input")
+            workflow.add_edge("get_user_input", "agent")
+        else:
+            workflow.set_entry_point("agent")
+        return workflow
+
     def _get_chat_model(self, model: Union[str, LanguageModelLike]) -> BaseChatModel:
         """Setup and bind tools to the model."""
         if isinstance(model, str):
@@ -262,6 +301,7 @@ class BaseAgent(ABC):
 
         system_prompt = self.get_prompt_from_config(config=config)
         from jutulgpt.rag.package_paths import get_package_root
+
         try:
             jutuldarcy_path = str(get_package_root("JutulDarcy"))
         except Exception:
@@ -300,7 +340,11 @@ class BaseAgent(ABC):
             # Log non-streamed responses
             if self._logger and self._logger.enabled:
                 # response.content can be str or list, convert to str for logging
-                content = response.content if isinstance(response.content, str) else str(response.content)
+                content = (
+                    response.content
+                    if isinstance(response.content, str)
+                    else str(response.content)
+                )
                 self._logger.log_assistant(
                     content=content if content else "",
                     title=self.printed_name or "Assistant",
@@ -332,8 +376,6 @@ class BaseAgent(ABC):
     ) -> Runnable:
         """
         Create a prompt runnable from the prompt.
-
-        Note: This is currently not used, but we should movefrom the get_prompt_from_config function to this method
         """
         if prompt is None:
             return RunnableCallable(lambda state: state.messages, name="Prompt")
@@ -453,10 +495,14 @@ class BaseAgent(ABC):
         system_parts = [system_prompt, workspace_message]
 
         if self._conversation_summary:
-            system_parts.append(f"## Previous conversation summary:\n{self._conversation_summary}")
+            system_parts.append(
+                f"## Previous conversation summary:\n{self._conversation_summary}"
+            )
 
         if summarization_happened:
-            system_parts.append("[Context was just summarized. The following messages contain your latest work. Continue with your current task.]")
+            system_parts.append(
+                "[Context was just summarized. The following messages contain your latest work. Continue with your current task.]"
+            )
 
         combined_system_content = "\n\n".join(system_parts)
         messages_list: List[BaseMessage] = [
@@ -467,20 +513,24 @@ class BaseAgent(ABC):
 
         # Update tracker with final list
         if self._context_tracker:
-            self._context_tracker.update(messages_list, summary=self._conversation_summary)
+            self._context_tracker.update(
+                messages_list, summary=self._conversation_summary
+            )
 
         # Trim as safety net (in case summarization didn't compress enough)
         trim_limit = int(configuration.context_window_size * CONTEXT_TRIM_THRESHOLD)
-        final_messages = list(trim_messages(
-            messages_list,
-            max_tokens=trim_limit,
-            strategy="last",
-            token_counter=model,
-            include_system=True,
-            start_on="human",
-            end_on=("human", "tool"),
-            allow_partial=False,
-        ))
+        final_messages = list(
+            trim_messages(
+                messages_list,
+                max_tokens=trim_limit,
+                strategy="last",
+                token_counter=model,
+                include_system=True,
+                start_on="human",
+                end_on=("human", "tool"),
+                allow_partial=False,
+            )
+        )
 
         return final_messages
 
@@ -534,13 +584,32 @@ class BaseAgent(ABC):
         updates.append(response)
         return updates
 
-    def call_model(self, state: state.State, config: RunnableConfig) -> dict:
+    def call_model(self, state: State, config: RunnableConfig) -> dict:
         """Call the model with the current state."""
+
         response = self.invoke_model(state=state, config=config)
+
+        # Check if we need more steps
+        if self._are_more_steps_needed(state, response):
+            fallback = AIMessage(
+                id=response.id,
+                content="Sorry, need more steps to process this request.",
+            )
+            return {"messages": self._finalize_context(fallback)}
+
+        # With OpenAI Responses API, response.content may be a list of content blocks.
+        # Always use the normalized text view for downstream parsing.
+        response_text = get_message_text(response)
+        code_block = get_code_from_response(response=response_text)
 
         # Finalize context: bundle response with any pending state changes
         messages = self._finalize_context(response)
-        return {"messages": messages}
+        return {
+            "messages": messages,
+            "code_block": code_block,
+            "error": False,
+            "mcp_answer": response_text,
+        }
 
     def get_user_input(self, state: state.State, config: RunnableConfig) -> dict:
         """Get user input for standalone mode."""
@@ -549,7 +618,9 @@ class BaseAgent(ABC):
         # Update and display context usage before user input
         if self._context_tracker:
             # Re-count with current state (includes model's latest response)
-            self._context_tracker.update(list(state.messages), summary=self._conversation_summary)
+            self._context_tracker.update(
+                list(state.messages), summary=self._conversation_summary
+            )
             self._context_tracker.display(
                 logger=self._logger,
                 show_console=configuration.show_context_usage,

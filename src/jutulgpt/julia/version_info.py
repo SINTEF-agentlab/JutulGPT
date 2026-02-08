@@ -34,7 +34,7 @@ def get_version_info(project_dir: Optional[str] = None) -> Optional[VersionInfo]
 
     # Output format: "VERSION|JUTUL_VERSION|JUTULDARCY_VERSION"
     # Regex parsing handles any startup messages that precede this
-    julia_code = '''
+    julia_code = """
 print(VERSION)
 print("|")
 try
@@ -50,7 +50,7 @@ try
 catch
     print("N/A")
 end
-'''
+"""
 
     try:
         result = subprocess.run(

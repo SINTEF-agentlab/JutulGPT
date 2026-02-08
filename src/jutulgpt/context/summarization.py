@@ -59,7 +59,9 @@ Preserve the key topics and outcomes from the previous summary."""
         config,
     )
 
-    summary = response.content if isinstance(response.content, str) else str(response.content)
+    summary = (
+        response.content if isinstance(response.content, str) else str(response.content)
+    )
     return summary if summary and len(summary) > 50 else None
 
 

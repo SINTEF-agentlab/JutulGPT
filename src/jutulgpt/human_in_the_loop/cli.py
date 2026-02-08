@@ -9,7 +9,7 @@ from jutulgpt.cli.cli_colorscheme import colorscheme
 from jutulgpt.globals import console
 from jutulgpt.logging.session import get_session_logger
 from jutulgpt.rag.utils import modify_doc_content
-from jutulgpt.utils import add_julia_context
+from jutulgpt.utils.code_parsing import add_julia_context
 
 from .interactions import (
     Action,
@@ -42,7 +42,9 @@ def _prompt(interaction: Interaction) -> Option:
 
     default_idx = str(
         next(
-            i for i, o in enumerate(interaction.options, 1) if o.action == interaction.default
+            i
+            for i, o in enumerate(interaction.options, 1)
+            if o.action == interaction.default
         )
     )
     choice = Prompt.ask("Your choice", choices=keys, default=default_idx)
@@ -52,7 +54,9 @@ def _prompt(interaction: Interaction) -> Option:
     # Log the interaction
     logger = get_session_logger()
     if logger:
-        logger.log_interaction(interaction, selected_option.action, selected_option.label)
+        logger.log_interaction(
+            interaction, selected_option.action, selected_option.label
+        )
 
     return selected_option
 
@@ -212,7 +216,10 @@ def response_on_check_code(code: str) -> tuple[bool, str, str]:
         logger = get_session_logger()
         if logger:
             logger.log_interaction(
-                CHECK_CODE, selected_option.action, selected_option.label, user_input=user_input
+                CHECK_CODE,
+                selected_option.action,
+                selected_option.label,
+                user_input=user_input,
             )
 
         return False, user_input, code
@@ -258,7 +265,10 @@ def response_on_error() -> tuple[bool, str]:
         logger = get_session_logger()
         if logger:
             logger.log_interaction(
-                ON_ERROR, selected_option.action, selected_option.label, user_input=user_input
+                ON_ERROR,
+                selected_option.action,
+                selected_option.label,
+                user_input=user_input,
             )
 
         return True, user_input

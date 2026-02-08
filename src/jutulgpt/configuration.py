@@ -22,7 +22,7 @@ from langchain_core.runnables import RunnableConfig, ensure_config
 from pydantic import BaseModel, ConfigDict
 
 from jutulgpt import prompts
-from jutulgpt.config_loader import load_config, get
+from jutulgpt.config_loader import get, load_config
 
 # ── Load TOML configuration (empty dict when file is absent) ─────────────
 _cfg = load_config()
@@ -192,7 +192,9 @@ DEFAULT_MODEL_PRESET: str = get(_cfg, "model", "preset", default="gpt-5.2-reason
 ACTIVE_MODEL_CONFIG: ModelConfig = _resolve_preset(DEFAULT_MODEL_PRESET)
 
 # Print/log the reasoning summary blocks (if returned by OpenAI)
-SHOW_REASONING_SUMMARY: bool = get(_cfg, "model", "show_reasoning_summary", default=True)
+SHOW_REASONING_SUMMARY: bool = get(
+    _cfg, "model", "show_reasoning_summary", default=True
+)
 
 ACTIVE_PROVIDER: Literal["ollama", "openai"] = ACTIVE_MODEL_CONFIG.provider
 ACTIVE_MODEL_NAME: str = ACTIVE_MODEL_CONFIG.model
@@ -224,7 +226,9 @@ DISPLAY_CONTENT_MAX_LENGTH = get(_cfg, "display", "content_max_length", default=
 # │  ├── CONTEXT_USAGE_THRESHOLD (0.7) → trigger summarization      │
 # │  └── CONTEXT_TRIM_THRESHOLD (0.9)  → safety trim if needed      │
 # └─────────────────────────────────────────────────────────────────┘
-MODEL_CONTEXT_WINDOW = ACTIVE_MODEL_CONFIG.context_window  # Total context budget in tokens
+MODEL_CONTEXT_WINDOW = (
+    ACTIVE_MODEL_CONFIG.context_window
+)  # Total context budget in tokens
 CONTEXT_USAGE_THRESHOLD = get(_cfg, "context", "usage_threshold", default=0.7)
 CONTEXT_TRIM_THRESHOLD = get(_cfg, "context", "trim_threshold", default=0.9)
 CONTEXT_DISPLAY_THRESHOLD = get(_cfg, "context", "display_threshold", default=0.3)
@@ -243,7 +247,9 @@ def _set_env(var: str):
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 # Only require OpenAI credentials when actually using OpenAI models/embeddings.
-if ACTIVE_MODEL_CONFIG.provider == "openai" or EMBEDDING_MODEL_NAME.startswith("openai:"):
+if ACTIVE_MODEL_CONFIG.provider == "openai" or EMBEDDING_MODEL_NAME.startswith(
+    "openai:"
+):
     _set_env("OPENAI_API_KEY")
 
 # LangSmith is optional; only enable if provided in environment/.env
@@ -256,23 +262,31 @@ logging.getLogger("faiss").setLevel(logging.WARNING)
 class HumanInteraction(BaseModel):
     model_config = ConfigDict(extra="forbid")  # optional strictness
     rag_query: bool = field(
-        default_factory=lambda: get(_cfg, "human_interaction", "rag_query", default=False),
+        default_factory=lambda: get(
+            _cfg, "human_interaction", "rag_query", default=False
+        ),
         metadata={"description": "Whether to modify the generated RAG query."},
     )
     retrieved_examples: bool = field(
-        default_factory=lambda: get(_cfg, "human_interaction", "retrieved_examples", default=False),
+        default_factory=lambda: get(
+            _cfg, "human_interaction", "retrieved_examples", default=False
+        ),
         metadata={
             "description": "Whether to verify and filter the retrieved examples."
         },
     )
     code_check: bool = field(
-        default_factory=lambda: get(_cfg, "human_interaction", "code_check", default=True),
+        default_factory=lambda: get(
+            _cfg, "human_interaction", "code_check", default=True
+        ),
         metadata={
             "description": "Whether to perform code checks on the generated code."
         },
     )
     fix_error: bool = field(
-        default_factory=lambda: get(_cfg, "human_interaction", "fix_error", default=True),
+        default_factory=lambda: get(
+            _cfg, "human_interaction", "fix_error", default=True
+        ),
         metadata={
             "description": "Whether to decide to try to fix errors in the generated code."
         },
@@ -312,7 +326,9 @@ class BaseConfiguration:
         {"__template_metadata__": {"kind": "retriever"}},
     ] = field(
         default_factory=lambda: get(_cfg, "retrieval", "provider", default="bm25"),
-        metadata={"description": "The retrieval provider to use. 'bm25' uses keyword-based BM25 search (no embeddings needed). 'faiss' and 'chroma' use vector-store retrieval with embeddings."},
+        metadata={
+            "description": "The retrieval provider to use. 'bm25' uses keyword-based BM25 search (no embeddings needed). 'faiss' and 'chroma' use vector-store retrieval with embeddings."
+        },
     )
 
     examples_search_type: Annotated[
@@ -326,7 +342,12 @@ class BaseConfiguration:
     )
 
     examples_search_kwargs: dict[str, Any] = field(
-        default_factory=lambda: get(_cfg, "retrieval", "search_kwargs", default={"k": 2, "fetch_k": 10, "lambda_mult": 0.5}),
+        default_factory=lambda: get(
+            _cfg,
+            "retrieval",
+            "search_kwargs",
+            default={"k": 2, "fetch_k": 10, "lambda_mult": 0.5},
+        ),
         metadata={
             "description": "Additional keyword arguments to pass to the search function of the retriever. See langgraph documentation for details about what kwargs works for the different search types. See https://python.langchain.com/api_reference/chroma/vectorstores/langchain_chroma.vectorstores.Chroma.html#langchain_chroma.vectorstores.Chroma.as_retriever"
         },
@@ -336,7 +357,9 @@ class BaseConfiguration:
         Literal["None", "flash"],
         {"__template_metadata__": {"kind": "reranker"}},
     ] = field(
-        default_factory=lambda: get(_cfg, "retrieval", "rerank", "provider", default="None"),
+        default_factory=lambda: get(
+            _cfg, "retrieval", "rerank", "provider", default="None"
+        ),
         metadata={
             "description": "The provider user for reranking the retrieved documents."
         },
@@ -385,7 +408,9 @@ class BaseConfiguration:
         },
     )
     log_filename_prefix: str = field(
-        default_factory=lambda: get(_cfg, "logging", "filename_prefix", default="agent_output"),
+        default_factory=lambda: get(
+            _cfg, "logging", "filename_prefix", default="agent_output"
+        ),
         metadata={"description": "Prefix for per-session log filenames."},
     )
     log_version_info: bool = field(
@@ -404,9 +429,7 @@ class BaseConfiguration:
     )
     context_window_size: int = field(
         default_factory=lambda: ACTIVE_MODEL_CONFIG.context_window,
-        metadata={
-            "description": "Model context window size in tokens."
-        },
+        metadata={"description": "Model context window size in tokens."},
     )
     context_summarize_threshold: float = field(
         default_factory=lambda: CONTEXT_USAGE_THRESHOLD,

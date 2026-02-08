@@ -8,7 +8,7 @@ from langchain_core.vectorstores import VectorStoreRetriever
 
 from jutulgpt.configuration import BaseConfiguration
 from jutulgpt.rag.retriever_specs import RetrieverSpec
-from jutulgpt.utils import get_provider_and_model
+from jutulgpt.utils.model import get_provider_and_model
 
 
 class RetrievalParams(TypedDict):

@@ -90,7 +90,9 @@ class ContextTracker:
     def get_last_usage(self) -> Optional[ContextUsage]:
         return self._last_usage
 
-    def update(self, messages: Sequence[BaseMessage], summary: str = "") -> ContextUsage:
+    def update(
+        self, messages: Sequence[BaseMessage], summary: str = ""
+    ) -> ContextUsage:
         """Update usage with current messages. Returns usage breakdown.
 
         Args:
@@ -112,7 +114,9 @@ class ContextTracker:
             elif isinstance(msg, (HumanMessage, AIMessage)):
                 usage.messages += tokens
                 if isinstance(msg, AIMessage) and msg.tool_calls:
-                    usage.tool_output += _estimate_tokens(str(msg.tool_calls), self._model)
+                    usage.tool_output += _estimate_tokens(
+                        str(msg.tool_calls), self._model
+                    )
 
         usage.total = usage.system + usage.summary + usage.tool_output + usage.messages
         self._last_usage = usage
@@ -147,6 +151,7 @@ class ContextTracker:
 
     def _format_markdown(self, usage: ContextUsage) -> str:
         """Format context usage as markdown for logging."""
+
         def fmt(n: int) -> str:
             return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
 
@@ -165,13 +170,17 @@ class ContextTracker:
             f"├─ System:          {fmt(usage.system):>8} {pct(usage.system):>8}\n",
         ]
         if usage.summary > 0:
-            lines.append(f"├─ Context summary: {fmt(usage.summary):>8} {pct(usage.summary):>8}\n")
-        lines.extend([
-            f"├─ Tool output:     {fmt(usage.tool_output):>8} {pct(usage.tool_output):>8}\n",
-            f"├─ Messages:        {fmt(usage.messages):>8} {pct(usage.messages):>8}\n",
-            f"└─ Free space:      {fmt(usage.free_space):>8} {pct(usage.free_space):>8}\n",
-            "```\n\n---\n\n",
-        ])
+            lines.append(
+                f"├─ Context summary: {fmt(usage.summary):>8} {pct(usage.summary):>8}\n"
+            )
+        lines.extend(
+            [
+                f"├─ Tool output:     {fmt(usage.tool_output):>8} {pct(usage.tool_output):>8}\n",
+                f"├─ Messages:        {fmt(usage.messages):>8} {pct(usage.messages):>8}\n",
+                f"└─ Free space:      {fmt(usage.free_space):>8} {pct(usage.free_space):>8}\n",
+                "```\n\n---\n\n",
+            ]
+        )
         return "".join(lines)
 
     def _display_console(self, usage: ContextUsage) -> None:
@@ -193,10 +202,22 @@ class ContextTracker:
 
         # Build colored progress bar (segments for each category)
         bar_width = 40
-        sys_w = int(bar_width * usage.system / usage.max_tokens) if usage.max_tokens else 0
-        sum_w = int(bar_width * usage.summary / usage.max_tokens) if usage.max_tokens else 0
-        tool_w = int(bar_width * usage.tool_output / usage.max_tokens) if usage.max_tokens else 0
-        msg_w = int(bar_width * usage.messages / usage.max_tokens) if usage.max_tokens else 0
+        sys_w = (
+            int(bar_width * usage.system / usage.max_tokens) if usage.max_tokens else 0
+        )
+        sum_w = (
+            int(bar_width * usage.summary / usage.max_tokens) if usage.max_tokens else 0
+        )
+        tool_w = (
+            int(bar_width * usage.tool_output / usage.max_tokens)
+            if usage.max_tokens
+            else 0
+        )
+        msg_w = (
+            int(bar_width * usage.messages / usage.max_tokens)
+            if usage.max_tokens
+            else 0
+        )
         free_w = bar_width - (sys_w + sum_w + tool_w + msg_w)
 
         # Aligned output using Text objects for proper style boundaries
@@ -214,7 +235,9 @@ class ContextTracker:
 
         # Header
         console.print()
-        console.print(f"[bold {bar_color}]Context Usage[/bold {bar_color}]", justify="center")
+        console.print(
+            f"[bold {bar_color}]Context Usage[/bold {bar_color}]", justify="center"
+        )
 
         # Bar line
         bar_line = Text()
@@ -224,14 +247,20 @@ class ContextTracker:
         bar_line.append("█" * tool_w, style=COLORS["tool_output"])
         bar_line.append("█" * msg_w, style=COLORS["messages"])
         bar_line.append("░" * free_w, style="dim")
-        bar_line.append(f" {fmt(usage.total)}/{fmt(usage.max_tokens)} ({usage.usage_percent:.1f}%)")
+        bar_line.append(
+            f" {fmt(usage.total)}/{fmt(usage.max_tokens)} ({usage.usage_percent:.1f}%)"
+        )
         console.print(bar_line)
 
         # Detail rows
         console.print(make_row("├─", "System:", COLORS["system"], usage.system))
         if usage.summary > 0:
-            console.print(make_row("├─", "Context summary:", COLORS["summary"], usage.summary))
-        console.print(make_row("├─", "Tool output:", COLORS["tool_output"], usage.tool_output))
+            console.print(
+                make_row("├─", "Context summary:", COLORS["summary"], usage.summary)
+            )
+        console.print(
+            make_row("├─", "Tool output:", COLORS["tool_output"], usage.tool_output)
+        )
         console.print(make_row("├─", "Messages:", COLORS["messages"], usage.messages))
         console.print(make_row("└─", "Free space:", COLORS["free"], usage.free_space))
         console.print()

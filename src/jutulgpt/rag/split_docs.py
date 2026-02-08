@@ -7,7 +7,7 @@ from langchain_text_splitters import (
     RecursiveCharacterTextSplitter,
 )
 
-from jutulgpt.utils import deduplicate_document_chunks, get_file_source
+from jutulgpt.utils.documents import deduplicate_document_chunks, get_file_source
 
 
 def split_docs(
