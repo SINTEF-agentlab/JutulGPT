@@ -122,21 +122,54 @@ uv run examples/autonomous_agent.py
 
 ## Settings and configuration
 
-The agent is configured in the `src/jutulgpt/configuration.py` file.  
+JutulGPT is configured through the **`jutulgpt.toml`** file in the project root. Edit this file to change the model, retrieval settings, context thresholds, logging, and more — no Python editing required.
+
+**Priority order:** Python defaults < `jutulgpt.toml` < CLI `--model` flag < LangGraph runtime config
+
+If `jutulgpt.toml` is missing, all settings fall back to sensible Python defaults.
+
+### `jutulgpt.toml` sections
+
+| Section | What it controls |
+|---|---|
+| `[mode]` | CLI vs MCP mode (`cli = true` / `mcp = true`) |
+| `[model]` | Default model preset and reasoning summary display |
+| `[retrieval]` | Retriever provider, search type, search kwargs, reranking |
+| `[human_interaction]` | Which steps require human approval |
+| `[display]` | Console/log output truncation |
+| `[context]` | Summarization/trim thresholds, recursion limit |
+| `[output]` | Output and summary message truncation limits |
+| `[logging]` | Log file settings (enabled, directory, prefix) |
+
+Example — switch the default model to GPT-4.1:
+
+```toml
+[model]
+preset = "gpt-4.1"
+```
+
+Example — use FAISS retrieval with similarity search:
+
+```toml
+[retrieval]
+provider = "faiss"
+search_type = "similarity"
+
+[retrieval.search_kwargs]
+k = 5
+```
 
 ### Model selection (recommended: CLI flag)
 
-You can select the model at startup with `--model`. The default is:
-
-- `--model gpt-5.2-reasoning` (alias for the `gpt-5.2-reasoning` preset)
-
-Examples:
+You can override the TOML model preset at startup with `--model`:
 
 ```bash
 uv run examples/agent.py --model gpt-4.1
 uv run examples/autonomous_agent.py --model gpt-5.2-reasoning
 uv run examples/autonomous_agent.py --model qwen3:14b-thinking
 ```
+
+If `--model` is omitted, the value from `[model].preset` in `jutulgpt.toml` is used (default: `gpt-5.2-reasoning`).
 
 ### Model configuration (presets)
 
@@ -148,30 +181,20 @@ Model presets are defined as `ModelConfig` constants in `src/jutulgpt/configurat
 
 See `docs/model_configuration.md` for the full table and details.
 
-More advanced settings are set in the `BaseConfiguration`. LangGraph will turn these into a `RunnableConfig`, which enables easier configuration at runtime.  You specify the following settings:
+### Advanced runtime settings
 
-- `human_interaction`: Enable human-in-the-loop. See the `HumanInteraction` class in the configuration file for detailed control.
-- `embedding_model`: Name of the embedding model to use. By default equal to the `EMBEDDING_MODEL_NAME`.
-- `retriever_provider`: The vector store provider to use for retrieval.
-- `examples_search_type`: Defines the type of search that the retriever should perform when retrieving examples.
-- `examples_search_kwargs`: Keyword arguments to pass to the search function of the retriever when retrieving examples. See [LangGraph documentation](https://python.langchain.com/api_reference/chroma/vectorstores/langchain_chroma.vectorstores.Chroma.html#langchain_chroma.vectorstores.Chroma.as_retriever) for details about what arguments works for the different search types.
-- `rerank_provider`: The provider user for reranking the retrieved documents.
-- `rerank_kwargs`: Keyword arguments provided to the reranker.
-- `agent_model`: The language model used for generating responses. Should be in the form `provider:model`. Defaults to the active preset (see `ACTIVE_MODEL`).
-- `autonomous_agent_model`: See `agent_model`.
-- `agent_prompt`: The prompt used for the agent.
-- `autonomous_agent_prompt`: The prompt used for the autonomous agent.
-
-The settings can be specified by passing a configuration dictionary when invoking the models. See f.ex the `run()` function in `src/jutulgpt/agents/agent_base.py`. Alternatively, the GUI provides a custom interface where the settings can be selected.
+More advanced settings are available in the `BaseConfiguration` dataclass. LangGraph turns these into a `RunnableConfig` for runtime configuration. Most of these read their defaults from `jutulgpt.toml` automatically. See `src/jutulgpt/configuration.py` for the full list.
 
 ## Interfaces
 
 ### CLI
 
-Enable the CLI-mode by in `src/jutulgpt/configuration.py` setting
+CLI mode is enabled by default. You can also explicitly set it in `jutulgpt.toml`:
 
-```python
-cli_mode = True
+```toml
+[mode]
+cli = true
+mcp = false
 ```
 
 This gives you a nice interface for asking questions, retrieving info, generating and running code etc. Both agents can also read and write to files.
@@ -180,11 +203,12 @@ This gives you a nice interface for asking questions, retrieving info, generatin
 
 For calling using JutulGPT from VSCode, it can communicate with Copilot through setting up an [MCP server](https://code.visualstudio.com/docs/copilot/customization/mcp-servers).
 
-To enable MCP server in JutulGPT, in `src/jutulgpt/configuration.py` set
+To enable MCP server in JutulGPT, set the following in `jutulgpt.toml`:
 
-```python
-cli_mode = False # Disable CLI mode
-mcp_mode = True
+```toml
+[mode]
+cli = false
+mcp = true
 ```
 
 and start JutulGPT through the [Langgraph CLI](https://docs.langchain.com/langsmith/cli) by running
@@ -200,7 +224,7 @@ Then, in the VSCode workspace where you want to use JutulGPT, add the an MCP ser
 
 ![GUI example](media/JutulGPT_GUI.png "GUI example")
 
-The JutulGPT also has an associated GUI called [JutulGPT-GUI](https://github.com/ellingsvee/JutulGPT-GUI).  For using the GUI, you must disable the CLI-mode. To this by setting `cli_mode = False` in `src/jutulgpt/configuration.py`.
+The JutulGPT also has an associated GUI called [JutulGPT-GUI](https://github.com/ellingsvee/JutulGPT-GUI).  For using the GUI, you must disable the CLI-mode. Do this by setting `cli = false` under `[mode]` in `jutulgpt.toml`.
 
 Install it by following the instructions in the repository. Alternatively do
 
@@ -226,7 +250,7 @@ pnpm dev # Run from JutulGPT-GUI/ directory
 
 The GUI can now be accessed on `http://localhost:3000/` (or some other location depending on your JutulGPT-GUI configuration).
 
-> NOTE: Remember to set `cli_mode = False` in `src/jutulgpt/configuration.py`.
+> NOTE: Remember to set `cli = false` under `[mode]` in `jutulgpt.toml`.
 
 ## Fimbul (WARNING)
 
