@@ -23,6 +23,8 @@ from langchain_core.runnables import (
 )
 from langchain_core.tools import BaseTool
 from langgraph.errors import ErrorCode, create_error_message
+from langgraph.graph import StateGraph
+from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.utils.runnable import RunnableCallable
 
@@ -38,11 +40,12 @@ from jutulgpt.configuration import (
     RECURSION_LIMIT,
     BaseConfiguration,
     cli_mode,
+    mcp_mode,
 )
 from jutulgpt.context import ContextTracker, summarize_conversation
 from jutulgpt.globals import console
 from jutulgpt.logging import SessionLogger, set_session_logger
-from jutulgpt.state import State
+from jutulgpt.state import MCPInputState, MCPOutputState, State
 from jutulgpt.utils.code_parsing import get_code_from_response
 from jutulgpt.utils.model import (
     get_message_text,
@@ -211,6 +214,34 @@ class BaseAgent(ABC):
         ```
         """
         pass
+
+    def _initialize_workflow(self):
+        if mcp_mode:
+            workflow = StateGraph(
+                self.state_schema,
+                input_schema=MCPInputState,
+                output_schema=MCPOutputState,
+                config_schema=BaseConfiguration,
+            )
+        else:
+            workflow = StateGraph(
+                self.state_schema,
+                config_schema=BaseConfiguration,
+            )
+        return workflow
+
+    def _configure_entry_point(self, workflow):
+        if mcp_mode:
+            workflow.add_node("mcp_input", self.state_from_mcp_input)
+            workflow.set_entry_point("mcp_input")
+            workflow.add_edge("mcp_input", "agent")
+        elif cli_mode:
+            workflow.add_node("get_user_input", self.get_user_input)
+            workflow.set_entry_point("get_user_input")
+            workflow.add_edge("get_user_input", "agent")
+        else:
+            workflow.set_entry_point("agent")
+        return workflow
 
     def _get_chat_model(self, model: Union[str, LanguageModelLike]) -> BaseChatModel:
         """Setup and bind tools to the model."""
