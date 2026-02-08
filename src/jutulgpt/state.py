@@ -57,20 +57,6 @@ class CodeBlock(BaseModel):
         return full_code
 
 
-# @dataclass
-# class InputState:
-#     """
-#     Base input state for the agent, representing the evolving conversation and tool interaction history.
-#
-#     - messages: List of all messages exchanged so far (user, AI, tool, etc.).
-#       The `add_messages` annotation ensures new messages are merged by ID, so the state is append-only unless a message is replaced.
-#     """
-#
-#     messages: Annotated[Sequence[AnyMessage], add_messages] = field(
-#         default_factory=list
-#     )
-
-
 # Define minimal input schema for MCP
 @dataclass
 class MCPInputState:

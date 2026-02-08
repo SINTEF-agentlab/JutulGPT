@@ -130,8 +130,7 @@ def load_chat_model(fully_specified_name: str) -> BaseChatModel:
         raise ValueError(
             f"Failed to load chat model '{provider}:{model}': {e}. "
             "Ensure the model name is correct, credentials are set (if required), "
-            "and the provider runtime is available."
-            + hint
+            "and the provider runtime is available." + hint
         ) from e
 
 
@@ -267,9 +266,7 @@ def get_code_from_response(
         CodeBlock: An object containing separated imports and code.
     """
     code_str = (
-        _get_code_string_from_response(response)
-        if within_julia_context
-        else response
+        _get_code_string_from_response(response) if within_julia_context else response
     )
 
     if not code_str:
@@ -482,13 +479,6 @@ def shorter_simulations(code: str) -> str:
     return code
 
 
-# def fix_imports(code_block: CodeBlock) -> CodeBlock:
-#     required_imports = ["Fimbul", "GLMakie"]
-#     if not all(pkg in code_block.imports for pkg in required_imports):
-#         return code_block  # No need to fix if Fimbul is not imported
-#     imports = 'using Pkg; Pkg.activate(".");\n' + code_block.imports
-#     return CodeBlock(imports=imports, code=code_block.code)
-#
 def fix_imports(code: str) -> str:
     required_imports = ["Fimbul", "GLMakie"]
     if not all(pkg in code for pkg in required_imports):
