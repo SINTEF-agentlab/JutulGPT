@@ -7,10 +7,10 @@ subprocess is only spawned once per package.
 """
 
 import logging
-import os
-import subprocess
 from functools import lru_cache
 from pathlib import Path
+
+from jutulgpt.julia.julia_code_runner import run_code_string_direct
 
 logger = logging.getLogger(__name__)
 
@@ -19,43 +19,27 @@ logger = logging.getLogger(__name__)
 def get_package_root(package_name: str) -> Path:
     """Return the root directory of an installed Julia package.
 
-    Runs ``julia --project=<cwd> -e 'using Pkg; …'`` (with the real package
-    name) and caches the result so subsequent calls are free.
+    Uses :func:`run_code_string_direct` to run a small Julia snippet that
+    prints the package root.  The result is cached so the Julia subprocess is
+    only spawned once per package per session.
     """
     julia_code = (
         f"using {package_name}; "
         f"print(dirname(dirname(pathof({package_name}))))"
     )
-    project_dir = os.getcwd()
-    try:
-        result = subprocess.run(
-            ["julia", f"--project={project_dir}", "--startup-file=no", "-e", julia_code],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            path = Path(result.stdout.strip())
-            if path.exists():
-                logger.info("Resolved %s package root: %s", package_name, path)
-                return path
-            raise FileNotFoundError(
-                f"Resolved path does not exist: {path}"
-            )
-        raise RuntimeError(
-            f"Julia failed to resolve {package_name} "
-            f"(rc={result.returncode}): {result.stderr.strip()}"
-        )
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(
-            f"Timeout while resolving {package_name} package path. "
-            "Is Julia installed and is JutulDarcy available?"
-        )
-    except FileNotFoundError:
-        raise RuntimeError(
-            "Julia executable not found. "
-            "Ensure Julia is installed and available on PATH."
-        )
+    stdout, stderr = run_code_string_direct(julia_code)
+
+    if stdout.strip():
+        path = Path(stdout.strip())
+        if path.exists():
+            logger.info("Resolved %s package root: %s", package_name, path)
+            return path
+        raise FileNotFoundError(f"Resolved path does not exist: {path}")
+
+    raise RuntimeError(
+        f"Failed to resolve {package_name} package path. "
+        f"Julia stderr: {stderr.strip()}"
+    )
 
 
 def get_package_docs_path(package_name: str, subdirs: list[str] | None = None) -> str:
