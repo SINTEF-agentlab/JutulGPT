@@ -78,8 +78,8 @@ def _run_linter(code: str, print_code: bool = True) -> tuple[str, bool]:
 def _run_julia_code(code: str, print_code: bool = True) -> tuple[str, bool]:
     """
     Returns:
-        str: String containing the code running failed. Empty if the code executed successfully.
-        bool: True if issues were found, False otherwise.
+        str: Error message if code failed, stdout output if code succeeded.
+        bool: True if code failed, False if code succeeded.
     """
     logger = get_session_logger()
 
@@ -140,8 +140,30 @@ def _run_julia_code(code: str, print_code: bool = True) -> tuple[str, bool]:
         return code_runner_error_message, True
 
     runtime = round(result["runtime"], 2)
+    output = result.get('output', '')
+    success_message = f"Code succeeded in {runtime} seconds!"
+
+    if not output.strip():
+        # No output - all get the same success message
+        display_message = log_message = agent_output = success_message
+    else:
+        # Terminal display: truncate to DISPLAY_CONTENT_MAX_LENGTH chars for readability
+        display_output = _truncate(output, DISPLAY_CONTENT_MAX_LENGTH)
+        display_message = f"{success_message}\n\nOutput:\n```\n{display_output}\n```"
+        if len(output) > DISPLAY_CONTENT_MAX_LENGTH:
+            display_message += f"\n[Output truncated: {len(output):,} chars → {DISPLAY_CONTENT_MAX_LENGTH:,} chars]"
+
+        # Log & agent: truncate to OUTPUT_TRUNCATION_LIMIT chars to avoid context pollution
+        truncated_output = _truncate(output, OUTPUT_TRUNCATION_LIMIT)
+        truncation_notice = ""
+        if len(output) > OUTPUT_TRUNCATION_LIMIT:
+            truncation_notice = f"\n\n[Output truncated: {len(output):,} chars → {OUTPUT_TRUNCATION_LIMIT:,} chars]"
+
+        log_message = f"{success_message}\n\nOutput:\n```\n{truncated_output}\n```{truncation_notice}"
+        agent_output = truncated_output + truncation_notice
+
     print_to_console(
-        text=f"Code succeeded in {runtime} seconds!",
+        text=display_message,
         title="Code Runner",
         border_style=colorscheme.success,
     )
@@ -149,7 +171,7 @@ def _run_julia_code(code: str, print_code: bool = True) -> tuple[str, bool]:
     if logger:
         logger.log(
             CodeRunnerEntry(
-                content=f"Code succeeded in {runtime} seconds!",
+                content=log_message,
                 title="Code Runner",
                 code=code,
                 language="julia",
@@ -157,7 +179,7 @@ def _run_julia_code(code: str, print_code: bool = True) -> tuple[str, bool]:
             )
         )
 
-    return "", False
+    return agent_output, False
 
 
 def check_code(

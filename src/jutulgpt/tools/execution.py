@@ -69,10 +69,8 @@ class RunJuliaCodeInput(BaseModel):
 )
 def run_julia_code(code: str):
     #code = shorter_simulations(code)
-    out, code_failed = _run_julia_code(code, print_code=True)
-    if code_failed:
-        return out
-    return "Code executed successfully!"
+    out, _ = _run_julia_code(code, print_code=True)
+    return out
 
 
 class RunJuliaLinterInput(BaseModel):
