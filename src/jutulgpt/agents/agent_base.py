@@ -131,15 +131,15 @@ class BaseAgent(ABC):
                 pass
             return msg
 
-    def _apply_cli_model_selection(self) -> bool:
-        """Apply `--model` preset selection for CLI runs.
+    def _apply_cli_args(self) -> bool:
+        """Apply CLI arguments (model, skip_terminal_approval, etc.) for CLI runs.
 
         Returns False if argparse handled `-h/--help` (i.e. should exit).
         """
         if not cli_mode:
             return True
 
-        from jutulgpt.cli.model_cli import apply_model_from_cli, parse_cli_args
+        from jutulgpt.cli.cli_args import apply_cli_args, parse_cli_args
 
         try:
             args = parse_cli_args()
@@ -147,7 +147,7 @@ class BaseAgent(ABC):
             # argparse handled -h/--help
             return False
 
-        apply_model_from_cli(args.model)
+        apply_cli_args(args)
         return True
 
     @abstractmethod
@@ -676,8 +676,7 @@ Here is the question asked by the other agent:
             raise ValueError("Cannot run standalone mode when part_of_multi_agent=True")
 
         try:
-            # CLI model selection (before config/logger initialization)
-            if not self._apply_cli_model_selection():
+            if not self._apply_cli_args():
                 return
 
             show_startup_screen()
@@ -685,6 +684,18 @@ Here is the question asked by the other agent:
             # Create configuration
             config = RunnableConfig(configurable={}, recursion_limit=RECURSION_LIMIT)
             configuration = BaseConfiguration.from_runnable_config(config=config)
+
+            # Display warning if autonomous mode is enabled
+            if configuration.skip_terminal_approval:
+                from rich.panel import Panel
+                console.print(
+                    Panel.fit(
+                        "[bold yellow]⚠️  AUTONOMOUS MODE ENABLED[/bold yellow]\n\n"
+                        "Terminal commands and file overwrites will execute without approval.\n"
+                        "The agent is guided to prefer safe tools, but use with caution.",
+                        border_style="yellow",
+                    )
+                )
 
             # Initialize session logger once at startup
             self._logger = SessionLogger.from_config(configuration)

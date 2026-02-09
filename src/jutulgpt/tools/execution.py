@@ -93,8 +93,16 @@ def run_julia_linter(code: str):
     return "Linter found no issues."
 
 
+from langchain_core.runnables import RunnableConfig, ensure_config
+from langchain_core.tools import InjectedToolArg
+from typing_extensions import Annotated
+
+
 @tool("execute_terminal_command", parse_docstring=True)
-def execute_terminal_command(command: str) -> str:
+def execute_terminal_command(
+    command: str,
+    config: Annotated[RunnableConfig, InjectedToolArg] = None,
+) -> str:
     """
     Execute a terminal command and return the output. Remember to include the project directory in the command when running the julia command. I.e. write f.ex. `julia --project=. my_script.jl`
 
@@ -105,14 +113,29 @@ def execute_terminal_command(command: str) -> str:
         str: The output from executing the command (stdout and stderr combined)
     """
 
+    from jutulgpt.configuration import BaseConfiguration
     from jutulgpt.human_in_the_loop import cli
 
-    run_command, command = cli.modify_terminal_run(command)
+    # Check if we should skip approval (for autonomous mode)
+    config = ensure_config(config)
+    configuration = BaseConfiguration.from_runnable_config(config)
+    skip_approval = configuration.skip_terminal_approval
+
+    if skip_approval:
+        run_command, command = True, command
+    else:
+        run_command, command = cli.modify_terminal_run(command)
 
     if not run_command:
         return "User did not allow you to run this command."
 
     working_directory = os.getcwd()
+
+    print_to_console(
+        text=f"Executing: `{command}`\nWorking directory: `{working_directory}`",
+        title="Terminal command",
+        border_style=colorscheme.message,
+    )
 
     try:
         # Execute the command

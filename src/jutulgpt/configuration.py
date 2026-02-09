@@ -211,6 +211,9 @@ EMBEDDING_MODEL_NAME: str = _EMBEDDING_MODEL_BY_PROVIDER[ACTIVE_PROVIDER]
 
 RECURSION_LIMIT = get(_cfg, "context", "recursion_limit", default=200)
 
+# Autonomous agent settings
+SKIP_TERMINAL_APPROVAL = False  # Skip approval for terminal commands and file overwrites
+
 # Display settings - for console and log output (not context management)
 DISPLAY_CONTENT_MAX_LENGTH = get(_cfg, "display", "content_max_length", default=800)
 
@@ -391,6 +394,17 @@ class BaseConfiguration:
         default=prompts.AUTONOMOUS_AGENT_PROMPT,
         metadata={
             "description": "The default prompt used for the fully autonomous agent."
+        },
+    )
+
+    # Autonomous agent settings
+    skip_terminal_approval: bool = field(
+        default_factory=lambda: SKIP_TERMINAL_APPROVAL,
+        metadata={
+            "description": "Skip human approval for terminal commands and file overwrites. "
+            "Enables fully autonomous operation. WARNING: Agent can execute commands "
+            "and overwrite files without asking. Agent is guided via prompts to prefer "
+            "safe tools (run_julia_code, read_from_file, etc.) over terminal commands."
         },
     )
 

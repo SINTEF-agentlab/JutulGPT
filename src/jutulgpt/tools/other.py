@@ -3,9 +3,11 @@ from __future__ import annotations
 import os
 import re
 
-from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig, ensure_config
+from langchain_core.tools import InjectedToolArg, tool
 from pydantic import BaseModel, Field
 from rich.panel import Panel
+from typing_extensions import Annotated
 
 from jutulgpt.cli import colorscheme, print_to_console
 from jutulgpt.configuration import DISPLAY_CONTENT_MAX_LENGTH, cli_mode
@@ -129,9 +131,17 @@ class WriteToFileInput(BaseModel):
 def write_to_file(
     file_path: str,
     content: str,
+    config: Annotated[RunnableConfig, InjectedToolArg] = None,
 ) -> str:
+    from jutulgpt.configuration import BaseConfiguration
+
+    # Check if we should skip approval (for autonomous mode)
+    config = ensure_config(config)
+    configuration = BaseConfiguration.from_runnable_config(config)
+    skip_approval = configuration.skip_terminal_approval
+
     # Check if file already exists
-    if os.path.exists(file_path):
+    if os.path.exists(file_path) and not skip_approval:
         try:
             # Read existing content for preview
             with open(file_path, "r", encoding="utf-8") as f:
