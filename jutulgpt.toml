@@ -28,7 +28,7 @@ provider = "chroma"
 search_type = "mmr" # only applicable for some providers
 
 [retrieval.search_kwargs]
-k = 2
+k = 3
 fetch_k = 10
 lambda_mult = 0.5
 
