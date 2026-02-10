@@ -69,7 +69,7 @@ class RunJuliaCodeInput(BaseModel):
 )
 def run_julia_code(code: str):
     code = fix_imports(code)
-    code = shorter_simulations(code)
+    #code = shorter_simulations(code)
     out, code_failed = _run_julia_code(code, print_code=True)
     if code_failed:
         return out
