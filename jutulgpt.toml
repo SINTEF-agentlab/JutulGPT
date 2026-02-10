@@ -24,7 +24,7 @@ show_reasoning_summary = true
 # provider: "bm25", "faiss", or "chroma"
 # search_type: "similarity", "mmr", or "similarity_score_threshold"
 [retrieval]
-provider = "bm25"
+provider = "chroma"
 search_type = "mmr" # only applicable for some providers
 
 [retrieval.search_kwargs]
