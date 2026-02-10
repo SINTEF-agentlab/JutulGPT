@@ -68,6 +68,21 @@ def get_package_docs_path(package_name: str, subdirs: list[str] | None = None) -
     raise FileNotFoundError(f"{package_name} documentation not found. Tried: {tried}")
 
 
+def get_package_faq_path(package_name: str, subpaths: list[str] | None = None) -> str:
+    """Return the FAQ markdown file path for a Julia package."""
+    if subpaths is None:
+        subpaths = ["docs/src/extras/faq.md"]
+
+    root = get_package_root(package_name)
+    for subpath in subpaths:
+        candidate = root / subpath
+        if candidate.exists() and candidate.is_file():
+            return str(candidate)
+
+    tried = ", ".join(str(root / s) for s in subpaths)
+    raise FileNotFoundError(f"{package_name} FAQ not found. Tried: {tried}")
+
+
 def get_package_examples_path(package_name: str, subdir: str = "examples") -> str:
     """Return the examples directory for a Julia package."""
     root = get_package_root(package_name)

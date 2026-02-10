@@ -18,7 +18,12 @@ from jutulgpt.configuration import (
 )
 from jutulgpt.julia import get_function_documentation_from_list_of_funcs
 from jutulgpt.logging import RAGEntry, ToolEntry, get_session_logger
-from jutulgpt.rag.package_paths import get_package_root
+from jutulgpt.rag.package_paths import (
+    get_package_docs_path,
+    get_package_examples_path,
+    get_package_faq_path,
+    get_package_root,
+)
 from jutulgpt.rag.retriever_specs import get_retriever_spec
 from jutulgpt.utils.documents import get_file_source
 
@@ -66,8 +71,9 @@ def make_retrieve_tool(
         # Format summary of what was retrieved
         if retrieved_examples:
             sources = [get_file_source(doc) for doc in retrieved_examples]
+            unique_sources = list(dict.fromkeys(sources))  # Deduplicate while preserving order
             summary = f"Retrieved {len(retrieved_examples)} examples:\n" + "\n".join(
-                f"- {s}" for s in sources
+                f"- {s}" for s in unique_sources
             )
         else:
             summary = "No examples found"
@@ -204,9 +210,10 @@ class GrepSearchInput(BaseModel):
     includePattern: Optional[str] = Field(
         default=None,
         description=(
-            "File pattern to search (e.g. '*.jl' or '*.md'). "
-            "Defaults to '*.jl' and '*.md'. "
-            "Note: Use simple patterns like '*.jl', not glob patterns like '**/*.jl' - "
+            "Optional file pattern to restrict search (e.g. '*.jl' or '*.md'). "
+            "If omitted, searches both '*.jl' and '*.md' (recommended for discovery). "
+            "Use '*.md' for conceptual/how-to documentation and '*.jl' for code/examples/API usage. "
+            "Note: Use simple patterns like '*.jl' or '*.md', not glob patterns like '**/*.jl' and '**/*.md' - "
             "the search is already recursive."
         ),
     )
@@ -221,7 +228,8 @@ class GrepSearchInput(BaseModel):
         "Search for keywords in JutulDarcy documentation and examples. "
         "Searches recursively through all files. Limited to first 20 matches. "
         "Returns file paths and line numbers with matching content. "
-        "Use this to discover which files contain relevant code before reading them with the file-reader tool."
+        "Use this to discover which files contain relevant code before reading them with the file-reader tool. "
+        "For broad discovery, leave includePattern unset; only set it when you want one file type."
     ),
     args_schema=GrepSearchInput,
 )
@@ -231,8 +239,18 @@ def grep_search(
     isRegexp: Optional[bool] = False,
 ) -> str:
     try:
-        workspace_path = str(get_package_root("JutulDarcy"))
-        cmd_parts = ["grep", "-r", "-n"]
+        package_root = get_package_root("JutulDarcy")
+        search_paths = [
+            get_package_examples_path("JutulDarcy"),
+            get_package_docs_path("JutulDarcy"),
+            get_package_faq_path("JutulDarcy"),
+        ]
+        if not search_paths:
+            raise FileNotFoundError(
+                "No searchable JutulDarcy examples/docs/faq paths were found."
+            )
+
+        cmd_parts = ["grep", "-r", "-n", "-i"]
 
         if isRegexp:
             cmd_parts.append("-E")
@@ -249,44 +267,47 @@ def grep_search(
                 ]
             )
 
-        cmd_parts.extend([query, workspace_path])
+        cmd_parts.append(query)
+        cmd_parts.extend(search_paths)
 
         result = subprocess.run(cmd_parts, capture_output=True, text=True, timeout=10)
-
         if result.stdout:
-            lines = result.stdout.strip().split("\n")[:20]  # Limit to 20 results
-            match_results = []  # Full details for agent
+            lines = result.stdout.strip().split("\n")
             file_counts: dict[str, int] = {}
-            for match in lines:
-                # Parse: filename:line_number:content
-                parts = match.split(":", 2)
-                if len(parts) != 3:
-                    match_results.append(match)
-                    continue
-                filename, line_str, content = parts
-                match_results.append(f"File: {filename}, Line {line_str}: {content}")
-                file_counts[filename] = file_counts.get(filename, 0) + 1
 
-            # Build file list with relative paths
+            # Count matches per file
+            for line in lines:
+                parts = line.split(":", 2)
+                if len(parts) == 3:
+                    file_counts[parts[0]] = file_counts.get(parts[0], 0) + 1
+
+            # Sort files by match count (descending)
+            sorted_files = sorted(file_counts.items(), key=lambda x: (-x[1], x[0]))
+
+            # Format file list with relative paths
             file_list = []
-            for filepath, count in file_counts.items():
-                rel_path = filepath.replace(str(workspace_path) + "/", "")
-                match_text = "match" if count == 1 else "matches"
-                file_list.append(f"- {rel_path} ({count} {match_text})")
+            for filepath, count in sorted_files:
+                rel_path = filepath.replace(str(package_root) + "/", "")
+                file_list.append(f"- {rel_path} ({count} {'match' if count == 1 else 'matches'})")
 
-            match_word = "match" if len(match_results) == 1 else "matches"
-            file_word = "file" if len(file_counts) == 1 else "files"
+            # Build match results for agent (limit to 20)
+            match_results = []
+            for line in lines[:20]:
+                parts = line.split(":", 2)
+                if len(parts) == 3:
+                    match_results.append(f"File: {parts[0]}, Line {parts[1]}: {parts[2]}")
+                else:
+                    match_results.append(line)
 
-            # Terminal: Show first 3 files only
+            # Terminal output
+            total_matches = len(lines)
+            num_files = len(file_counts)
             if len(file_list) > 3:
-                terminal_output = f"First 3 of {len(file_counts)} {file_word} ({len(match_results)} {match_word} total):\n"
+                terminal_output = f"Top 3 of {num_files} files ({total_matches} matches total):\n"
                 terminal_output += "\n".join(file_list[:3])
-                terminal_output += f"\n+ {len(file_list) - 3} more {file_word}"
+                terminal_output += f"\n+ {num_files - 3} more files"
             else:
-                terminal_output = (
-                    f"{len(match_results)} {match_word} in {len(file_counts)} {file_word}:\n"
-                    + "\n".join(file_list)
-                )
+                terminal_output = f"{total_matches} matches in {num_files} files:\n" + "\n".join(file_list)
 
             print_to_console(
                 text=terminal_output,
@@ -295,10 +316,7 @@ def grep_search(
             )
 
             # Log: Show all files
-            log_output = (
-                f"Found {len(match_results)} {match_word} in {len(file_counts)} {file_word}:\n"
-                + "\n".join(file_list)
-            )
+            log_output = f"Found {total_matches} matches in {num_files} files:\n" + "\n".join(file_list)
 
             logger = get_session_logger()
             if logger:
@@ -312,9 +330,7 @@ def grep_search(
                 )
 
             # Return full details to agent
-            return f"Found {len(match_results)} {match_word}:\n" + "\n\n".join(
-                match_results
-            )
+            return f"Found {total_matches} matches:\n" + "\n\n".join(match_results)
         else:
             no_match_msg = f"No matches found for: {query}"
             print_to_console(
