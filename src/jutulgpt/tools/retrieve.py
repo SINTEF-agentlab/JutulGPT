@@ -72,8 +72,16 @@ def make_retrieve_tool(
         if retrieved_examples:
             sources = [get_file_source(doc) for doc in retrieved_examples]
             unique_sources = list(dict.fromkeys(sources))  # Deduplicate while preserving order
+
+            # Make paths relative to package root for cleaner display
+            package_root = str(get_package_root(doc_label))
+            relative_sources = [
+                s.replace(package_root + "/", "") if s.startswith(package_root) else s
+                for s in unique_sources
+            ]
+
             summary = f"Retrieved {len(retrieved_examples)} examples:\n" + "\n".join(
-                f"- {s}" for s in unique_sources
+                f"- {s}" for s in relative_sources
             )
         else:
             summary = "No examples found"
