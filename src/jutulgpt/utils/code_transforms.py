@@ -145,10 +145,3 @@ def shorter_simulations(code: str) -> str:
         )
 
     return code
-
-
-def fix_imports(code: str) -> str:
-    required_imports = ["Fimbul", "GLMakie"]
-    if not all(pkg in code for pkg in required_imports):
-        return code
-    return 'using Pkg; Pkg.activate(".");\n' + code

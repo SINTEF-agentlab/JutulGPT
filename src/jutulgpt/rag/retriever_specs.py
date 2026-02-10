@@ -54,8 +54,6 @@ def get_retriever_spec(package: str, doc_type: str) -> RetrieverSpec:
     """
     if package == "jutuldarcy":
         return _get_jutuldarcy_spec(doc_type)
-    elif package == "fimbul":
-        return _get_fimbul_spec(doc_type)
     raise ValueError(f"Unknown package: {package}")
 
 
@@ -99,39 +97,3 @@ def _get_jutuldarcy_spec(doc_type: str) -> RetrieverSpec:
             collection_name=f"jutuldarcy_examples_{package_suffix}",
         )
     raise ValueError(f"Unknown doc_type for jutuldarcy: {doc_type}")
-
-
-# ---------------------------------------------------------------------------
-# Fimbul – still uses local rag/ copies
-# ---------------------------------------------------------------------------
-
-
-def _get_fimbul_spec(doc_type: str) -> RetrieverSpec:
-    from jutulgpt.configuration import PROJECT_ROOT
-
-    if doc_type == "docs":
-        return RetrieverSpec(
-            dir_path=str(PROJECT_ROOT / "rag" / "fimbul" / "docs" / "man"),
-            filetype="md",
-            split_func=split_docs.split_docs,
-            persist_path=lambda provider: _persist_path(
-                "fimbul_docs", provider, "local"
-            ),
-            cache_path=_cache_path("fimbul_docs", "local"),
-            collection_name="fimbul_docs_local",
-        )
-    elif doc_type == "examples":
-        return RetrieverSpec(
-            dir_path=str(PROJECT_ROOT / "rag" / "fimbul" / "examples"),
-            filetype="jl",
-            split_func=partial(
-                split_examples.split_examples,
-                header_to_split_on=1,  # Split on `# #`
-            ),
-            persist_path=lambda provider: _persist_path(
-                "fimbul_examples", provider, "local"
-            ),
-            cache_path=_cache_path("fimbul_examples", "local"),
-            collection_name="fimbul_examples_local",
-        )
-    raise ValueError(f"Unknown doc_type for fimbul: {doc_type}")

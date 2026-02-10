@@ -65,7 +65,7 @@ Be proactive and thorough with tool usage:
 - **Wrapping**: Wrap your code in a block ```julia your code here ```. Do not include `\n` or other non-unary operators to your outputted code.
 - **Standard library preference**: Avoid external packages unless explicitly required
 - **Proper syntax**: Remember `end` statements, proper indexing, etc.
-- **Import dependencies**: Always import Jutul when using JutulDarcy/Fimbul
+- **Import dependencies**: Always import Jutul when using JutulDarcy
 
 ---
 
@@ -159,7 +159,7 @@ Be proactive and thorough with tool usage:
 - **Wrapping**: Wrap your code in a block ```julia your code here ```. Do not include `\n` or other non-unary operators to your outputted code.
 - **Standard library preference**: Avoid external packages unless explicitly required
 - **Proper syntax**: Remember `end` statements, proper indexing, etc.
-- **Import dependencies**: Always import Jutul when using JutulDarcy/Fimbul
+- **Import dependencies**: Always import Jutul when using JutulDarcy
 
 ---
 

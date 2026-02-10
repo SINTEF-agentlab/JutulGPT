@@ -283,7 +283,7 @@ def modify_rag_query(query: str, retriever_name: str) -> str:
 
     Args:
         query: The original query string
-        retriever_name: Name of the retriever (e.g., "JutulDarcy", "Fimbul")
+        retriever_name: Name of the retriever (e.g., "JutulDarcy")
 
     Returns:
         str: The potentially modified query (empty string if skipped)

@@ -18,7 +18,6 @@ from jutulgpt.utils.code_parsing import (
 )
 from jutulgpt.utils.code_transforms import (
     check_for_package_install,
-    fix_imports,
     remove_plotting,
     replace_case,
     shorten_first_argument,
@@ -48,7 +47,6 @@ __all__ = [
     "split_code_into_lines",
     # code_transforms
     "check_for_package_install",
-    "fix_imports",
     "remove_plotting",
     "replace_case",
     "shorten_first_argument",

@@ -141,13 +141,6 @@ class RetrieveJutulDarcyInput(BaseModel):
         "The query that will be used for document and example retrieval",
     )
 
-
-class RetrieveFimbulInput(BaseModel):
-    query: str = Field(
-        "The query that will be used for document and example retrieval",
-    )
-
-
 # Create tools
 retrieve_jutuldarcy_examples = make_retrieve_tool(
     name="retrieve_jutuldarcy_examples",
@@ -155,14 +148,6 @@ retrieve_jutuldarcy_examples = make_retrieve_tool(
     doc_label="JutulDarcy",
     input_cls=RetrieveJutulDarcyInput,
 )
-
-retrieve_fimbul = make_retrieve_tool(
-    name="retrieve_fimbul",
-    doc_key="fimbul",
-    doc_label="Fimbul",
-    input_cls=RetrieveFimbulInput,
-)
-
 
 class RetrieveFunctionDocumentationInput(BaseModel):
     function_names: List[str] = Field(
