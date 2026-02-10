@@ -7,6 +7,10 @@ from typing import Union
 
 
 def run_julia_file(code: str, julia_file_name: str, project_dir: str | None = None):
+    """
+    Run Julia code via a Julia script file.
+    Returns (stdout, stderr, returncode)
+    """
     assert julia_file_name.endswith(".jl"), "julia_file_name must end with .jl"
 
     if project_dir is None:
@@ -38,7 +42,7 @@ def run_julia_file(code: str, julia_file_name: str, project_dir: str | None = No
             text=True,
             cwd=project_dir,
         )
-        return result.stdout, result.stderr
+        return result.stdout, result.stderr, result.returncode
     finally:
         # Clean up the temporary file
         try:
@@ -55,6 +59,7 @@ def run_code_string_direct(
 ):
     """
     Alternative approach: Run Julia code directly using -e flag instead of temporary file.
+    Returns (stdout, stderr, returncode)
     """
     if project_dir is None:
         project_dir = os.getcwd()
@@ -74,9 +79,9 @@ def run_code_string_direct(
             text=True,
             cwd=project_dir,
         )
-        return result.stdout, result.stderr
+        return result.stdout, result.stderr, result.returncode
     except Exception as e:
-        return "", f"Error running Julia: {e}"
+        return "", f"Error running Julia: {e}", 1
 
 
 def _split_stacktrace(msg: str):
@@ -141,10 +146,12 @@ def get_error_message(result) -> str:
 
 def run_code(code: str) -> dict:
     start_time = time.time()
-    stdout, stderr = run_code_string_direct(code=code)
+    stdout, stderr, returncode = run_code_string_direct(code=code)
     end_time = time.time()
 
-    if stderr:
+    # Check the exit code to determine if there was an error
+    # Note: stderr may contain progress bars and other informational output
+    if returncode != 0:
         error_message, error_stacktrace = _split_stacktrace(stderr)
 
         result = {

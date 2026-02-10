@@ -47,7 +47,7 @@ fix_error = true
 # ── Display ──────────────────────────────────────────────────────────────
 # Max characters shown in console / log output (not context management).
 [display]
-content_max_length = 800
+content_max_length = 2000
 
 # ── Context Management ───────────────────────────────────────────────────
 # Thresholds are fractions of the model's context window.
