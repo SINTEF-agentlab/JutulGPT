@@ -190,7 +190,11 @@ class GrepSearchInput(BaseModel):
     """Input for grep search tool."""
 
     query: str = Field(
-        description="The keyword based pattern to search for in files. Can be a regex or plain text pattern"
+        description=(
+            "The search pattern. With isRegexp=false (default), searches for the exact phrase. "
+            "With isRegexp=true, supports regex patterns (e.g. 'CartesianMesh|setup_well' for OR). "
+            "For multiple unrelated terms, prefer separate searches."
+        )
     )
     includePattern: Optional[str] = Field(
         default=None,
@@ -203,7 +207,11 @@ class GrepSearchInput(BaseModel):
         ),
     )
     isRegexp: Optional[bool] = Field(
-        default=False, description="Whether the pattern is a regex."
+        default=False,
+        description=(
+            "If false (default), query is treated as exact phrase/substring. "
+            "If true, query is a regex pattern supporting OR (|), wildcards, etc."
+        ),
     )
 
 
