@@ -23,17 +23,26 @@ def get_package_root(package_name: str) -> Path:
     prints the package root.  The result is cached so the Julia subprocess is
     only spawned once per package per session.
     """
-    julia_code = (
-        f"using {package_name}; print(dirname(dirname(pathof({package_name}))))"
+    julia_code = f"using {package_name}; println(dirname(dirname(pathof({package_name}))))"
+    stdout, stderr = run_code_string_direct(
+        julia_code,
+        startup_file=False,
+        history_file=False,
     )
-    stdout, stderr = run_code_string_direct(julia_code)
 
-    if stdout.strip():
-        path = Path(stdout.strip())
+    lines = [line.strip() for line in stdout.splitlines() if line.strip()]
+    if len(lines) == 1:
+        path = Path(lines[0]).expanduser()
         if path.exists():
             logger.info("Resolved %s package root: %s", package_name, path)
             return path
         raise FileNotFoundError(f"Resolved path does not exist: {path}")
+
+    if lines:
+        raise RuntimeError(
+            "Unexpected Julia output while resolving package path. "
+            f"Expected exactly one path line, got {len(lines)} lines: {lines}"
+        )
 
     raise RuntimeError(
         f"Failed to resolve {package_name} package path. Julia stderr: {stderr.strip()}"
