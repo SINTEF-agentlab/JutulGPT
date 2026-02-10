@@ -199,26 +199,23 @@ class GrepSearchInput(BaseModel):
 
     query: str = Field(
         description=(
-            "The search pattern. With isRegexp=false (default), searches for the exact phrase. "
-            "With isRegexp=true, supports regex patterns (e.g. 'CartesianMesh|setup_well' for OR). "
-            "For multiple unrelated terms, prefer separate searches."
+            "The search term. Simpler queries work best — a single identifier or keyword "
+            "will match more broadly than a long or specific phrase. "
+            "With isRegexp=true, use '|' to search for multiple terms at once."
         )
     )
     includePattern: Optional[str] = Field(
         default=None,
         description=(
             "Optional file pattern to restrict search (e.g. '*.jl' or '*.md'). "
-            "If omitted, searches both '*.jl' and '*.md' (recommended for discovery). "
-            "Use '*.md' for conceptual/how-to documentation and '*.jl' for code/examples/API usage. "
-            "Note: Use simple patterns like '*.jl' or '*.md', not glob patterns like '**/*.jl' and '**/*.md' - "
-            "the search is already recursive."
+            "If omitted, searches both '*.jl' and '*.md'."
         ),
     )
     isRegexp: Optional[bool] = Field(
         default=False,
         description=(
-            "If false (default), query is treated as exact phrase/substring. "
-            "If true, query is a regex pattern supporting OR (|), wildcards, etc."
+            "If false (default), query is matched as an exact literal substring. "
+            "If true, query is a POSIX extended regex (use '|' for OR, '.*' for wildcards)."
         ),
     )
 
@@ -226,11 +223,13 @@ class GrepSearchInput(BaseModel):
 @tool(
     "grep_search",
     description=(
-        "Search for keywords in JutulDarcy documentation and examples. "
-        "Searches recursively through all files. Limited to first 20 matches. "
-        "Returns file paths and line numbers with matching content. "
-        "Use this to discover which files contain relevant code before reading them with the file-reader tool. "
-        "For broad discovery, leave includePattern unset; only set it when you want one file type."
+        "Search for a keyword or identifier in JutulDarcy documentation and examples. "
+        "Returns file paths and matching lines. "
+        "Tips: "
+        "1) Simpler queries match more broadly — prefer short identifiers over long phrases. "
+        "2) If no results, try a shorter or more general term rather than guessing variations. "
+        "3) To search for multiple terms at once, set isRegexp=true and join them with '|'. "
+        "4) One concept per search — search for an identifier, then read the matching file for context."
     ),
     args_schema=GrepSearchInput,
 )
@@ -261,17 +260,13 @@ def grep_search(
         if includePattern:
             cmd_parts.extend(["--include", includePattern])
         else:
-            cmd_parts.extend(
-                [
-                    "--include=*.jl",
-                    "--include=*.md",
-                ]
-            )
+            cmd_parts.extend(["--include=*.jl", "--include=*.md"])
 
         cmd_parts.append(query)
         cmd_parts.extend(search_paths)
 
         result = subprocess.run(cmd_parts, capture_output=True, text=True, timeout=10)
+
         if result.stdout:
             lines = result.stdout.strip().split("\n")
             file_counts: dict[str, int] = {}
@@ -296,7 +291,8 @@ def grep_search(
             for line in lines[:20]:
                 parts = line.split(":", 2)
                 if len(parts) == 3:
-                    match_results.append(f"File: {parts[0]}, Line {parts[1]}: {parts[2]}")
+                    rel_path = parts[0].replace(str(package_root) + "/", "")
+                    match_results.append(f"File: {rel_path}, Line {parts[1]}: {parts[2].strip()}")
                 else:
                     match_results.append(line)
 
@@ -331,11 +327,20 @@ def grep_search(
                 )
 
             # Return full details to agent
-            return f"Found {total_matches} matches:\n" + "\n\n".join(match_results)
+            return f"Found {total_matches} matches in {num_files} files:\n" + "\n".join(file_list) + "\n\n" + "\n\n".join(match_results)
         else:
-            no_match_msg = f"No matches found for: {query}"
+            # Simple message for console/log
+            simple_msg = f"No matches found for: {query}"
+
+            # Agent gets additional tip
+            agent_msg = (
+                f"No matches found for: {query}\n"
+                f"Tip: try a shorter or more general term. Use isRegexp=true with '|' to "
+                f"search for multiple alternatives at once."
+            )
+
             print_to_console(
-                text=no_match_msg,
+                text=simple_msg,
                 title=f"Grep search: {query}",
                 border_style=colorscheme.message,
             )
@@ -343,13 +348,13 @@ def grep_search(
             if logger:
                 logger.log(
                     ToolEntry(
-                        content=no_match_msg,
+                        content=simple_msg,
                         title=f"Grep search: {query}",
                         tool_name="grep_search",
                         args={"query": query, "includePattern": includePattern},
                     )
                 )
-            return no_match_msg
+            return agent_msg
 
     except Exception as e:
         error_msg = f"Error during text search: {str(e)}"
