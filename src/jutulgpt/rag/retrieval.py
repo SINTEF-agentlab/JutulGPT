@@ -105,7 +105,7 @@ def make_bm25_retriever(
 
 
 # ---------------------------------------------------------------------------
-# Vector-store retrievers (FAISS / Chroma) – kept for backward-compatibility
+# Vector-store retrievers (FAISS / Chroma)
 # ---------------------------------------------------------------------------
 
 
@@ -216,6 +216,8 @@ def make_retriever(
         retrieval_params: Override retrieval parameters (search_type, search_kwargs, etc.)
     """
     configuration = BaseConfiguration.from_runnable_config(config)
+    search_type = retrieval_params["search_type"]
+    search_kwargs = retrieval_params["search_kwargs"]
 
     # Get the retriever
     selected_retriever = None
@@ -223,30 +225,37 @@ def make_retriever(
         case "bm25":
             with make_bm25_retriever(
                 spec,
-                retrieval_params["search_kwargs"],
+                search_kwargs,
             ) as retriever:
                 selected_retriever = retriever
 
         case "faiss":
-            embedding_model = make_text_encoder(configuration.embedding_model)
-            with make_faiss_retriever(
-                configuration,
-                spec,
-                embedding_model,
-                retrieval_params["search_type"],
-                retrieval_params["search_kwargs"],
-            ) as retriever:
-                selected_retriever = retriever
+            try:
+                embedding_model = make_text_encoder(configuration.embedding_model)
+                with make_faiss_retriever(
+                    configuration,
+                    spec,
+                    embedding_model,
+                    search_type,
+                    search_kwargs,
+                ) as retriever:
+                    selected_retriever = retriever
+            except Exception as e:
+                raise RuntimeError(f"Failed to initialize FAISS retriever: {e}") from e
+
         case "chroma":
-            embedding_model = make_text_encoder(configuration.embedding_model)
-            with make_chroma_retriever(
-                configuration,
-                spec,
-                embedding_model,
-                retrieval_params["search_type"],
-                retrieval_params["search_kwargs"],
-            ) as retriever:
-                selected_retriever = retriever
+            try:
+                embedding_model = make_text_encoder(configuration.embedding_model)
+                with make_chroma_retriever(
+                    configuration,
+                    spec,
+                    embedding_model,
+                    search_type,
+                    search_kwargs,
+                ) as retriever:
+                    selected_retriever = retriever
+            except Exception as e:
+                raise RuntimeError(f"Failed to initialize Chroma retriever: {e}") from e
 
         case _:
             raise ValueError(
@@ -254,6 +263,9 @@ def make_retriever(
                 f"Expected one of: {', '.join(BaseConfiguration.__annotations__['retriever_provider'].__args__)}\n"
                 f"Got: {configuration.retriever_provider}"
             )
+
+    if selected_retriever is None:
+        raise RuntimeError("Failed to initialize retriever.")
 
     # Apply the reranker
     match configuration.rerank_provider:
