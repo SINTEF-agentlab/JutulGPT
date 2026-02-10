@@ -29,7 +29,7 @@ Retireve the code by cloning the repository
 
 ```bash
 # Clone and choose the repo
-git clone https://github.com/ellingsvee/JutulGPT.git
+git clone https://github.com/SINTEF-agentlab/JutulGPT.git
 cd JutulGPT/
 ```
 
@@ -251,10 +251,6 @@ pnpm dev # Run from JutulGPT-GUI/ directory
 The GUI can now be accessed on `http://localhost:3000/` (or some other location depending on your JutulGPT-GUI configuration).
 
 > NOTE: Remember to set `cli = false` under `[mode]` in `jutulgpt.toml`.
-
-## Fimbul (WARNING)
-
-There is some legacy code for generating code for the Fimbul package. I have removed a lot of it, but it can be re-implemented by adding some tools and modifying the prompts. My suggestion is to get familiar with the current tools fot JutulDarcy, and then later extend to Fimbul.
 
 ## Testing
 

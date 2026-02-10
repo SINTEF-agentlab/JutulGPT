@@ -23,17 +23,26 @@ def get_package_root(package_name: str) -> Path:
     prints the package root.  The result is cached so the Julia subprocess is
     only spawned once per package per session.
     """
-    julia_code = (
-        f"using {package_name}; print(dirname(dirname(pathof({package_name}))))"
+    julia_code = f"using {package_name}; println(dirname(dirname(pathof({package_name}))))"
+    stdout, stderr = run_code_string_direct(
+        julia_code,
+        startup_file=False,
+        history_file=False,
     )
-    stdout, stderr = run_code_string_direct(julia_code)
 
-    if stdout.strip():
-        path = Path(stdout.strip())
+    lines = [line.strip() for line in stdout.splitlines() if line.strip()]
+    if len(lines) == 1:
+        path = Path(lines[0]).expanduser()
         if path.exists():
             logger.info("Resolved %s package root: %s", package_name, path)
             return path
         raise FileNotFoundError(f"Resolved path does not exist: {path}")
+
+    if lines:
+        raise RuntimeError(
+            "Unexpected Julia output while resolving package path. "
+            f"Expected exactly one path line, got {len(lines)} lines: {lines}"
+        )
 
     raise RuntimeError(
         f"Failed to resolve {package_name} package path. Julia stderr: {stderr.strip()}"
@@ -57,6 +66,21 @@ def get_package_docs_path(package_name: str, subdirs: list[str] | None = None) -
 
     tried = ", ".join(str(root / s) for s in subdirs)
     raise FileNotFoundError(f"{package_name} documentation not found. Tried: {tried}")
+
+
+def get_package_faq_path(package_name: str, subpaths: list[str] | None = None) -> str:
+    """Return the FAQ markdown file path for a Julia package."""
+    if subpaths is None:
+        subpaths = ["docs/src/extras/faq.md"]
+
+    root = get_package_root(package_name)
+    for subpath in subpaths:
+        candidate = root / subpath
+        if candidate.exists() and candidate.is_file():
+            return str(candidate)
+
+    tried = ", ".join(str(root / s) for s in subpaths)
+    raise FileNotFoundError(f"{package_name} FAQ not found. Tried: {tried}")
 
 
 def get_package_examples_path(package_name: str, subdir: str = "examples") -> str:

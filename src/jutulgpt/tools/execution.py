@@ -12,7 +12,7 @@ from jutulgpt.cli import colorscheme, print_to_console
 from jutulgpt.configuration import OUTPUT_TRUNCATION_LIMIT
 from jutulgpt.logging import ToolEntry, get_session_logger
 from jutulgpt.nodes.check_code import _run_julia_code, _run_linter
-from jutulgpt.utils.code_transforms import fix_imports, shorter_simulations
+from jutulgpt.utils.code_transforms import shorter_simulations
 
 
 def _truncate_output(
@@ -68,8 +68,7 @@ class RunJuliaCodeInput(BaseModel):
     description="Execute Julia code. Returns output or error message.",
 )
 def run_julia_code(code: str):
-    code = fix_imports(code)
-    code = shorter_simulations(code)
+    #code = shorter_simulations(code)
     out, code_failed = _run_julia_code(code, print_code=True)
     if code_failed:
         return out

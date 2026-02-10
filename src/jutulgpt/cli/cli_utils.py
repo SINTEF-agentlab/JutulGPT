@@ -265,17 +265,6 @@ def stream_to_console(
         content = Markdown(streamed_text) if with_markdown else streamed_text
         console.print(Panel.fit(content, **panel_kwargs))
 
-    # Tool calls (when agent makes tool calls without text output)
-    if has_tools and not has_text and ai_message:
-        names = [tc.get("name", "?") for tc in getattr(ai_message, "tool_calls", [])]
-        console.print(
-            Panel(
-                Text(f"Calling tools: {', '.join(names)}", style="dim"),
-                title=title or "Agent",
-                border_style="dim cyan",
-            )
-        )
-
     if ai_message is None:
         raise RuntimeError("No message from model")
     return ai_message

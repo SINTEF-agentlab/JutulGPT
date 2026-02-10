@@ -47,7 +47,12 @@ def run_julia_file(code: str, julia_file_name: str, project_dir: str | None = No
             pass  # File might already be deleted
 
 
-def run_code_string_direct(code: str, project_dir: str | None = None):
+def run_code_string_direct(
+    code: str,
+    project_dir: str | None = None,
+    startup_file: bool = True,
+    history_file: bool = True,
+):
     """
     Alternative approach: Run Julia code directly using -e flag instead of temporary file.
     """
@@ -55,8 +60,15 @@ def run_code_string_direct(code: str, project_dir: str | None = None):
         project_dir = os.getcwd()
 
     try:
+        cmd = ["julia", f"--project={project_dir}"]
+        if not startup_file:
+            cmd.append("--startup-file=no")
+        if not history_file:
+            cmd.append("--history-file=no")
+        cmd.extend(["-e", code])
+
         result = subprocess.run(
-            ["julia", f"--project={project_dir}", "-e", code],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
