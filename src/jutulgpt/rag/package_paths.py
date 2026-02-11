@@ -24,11 +24,16 @@ def get_package_root(package_name: str) -> Path:
     only spawned once per package per session.
     """
     julia_code = f"using {package_name}; println(dirname(dirname(pathof({package_name}))))"
-    stdout, stderr = run_code_string_direct(
+    stdout, stderr, returncode = run_code_string_direct(
         julia_code,
         startup_file=False,
         history_file=False,
     )
+
+    if returncode != 0:
+        raise RuntimeError(
+            f"Failed to resolve {package_name} package path. Julia stderr: {stderr.strip()}"
+        )
 
     lines = [line.strip() for line in stdout.splitlines() if line.strip()]
     if len(lines) == 1:

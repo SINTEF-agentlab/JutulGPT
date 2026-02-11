@@ -176,12 +176,12 @@ def retrieve_function_documentation(
         func_names=function_names
     )
 
-    # Log the retrieval
     logger = get_session_logger()
     if logger:
+        message = "Retrieving documentation for functions: " + ", ".join(function_names)
         logger.log(
             ToolEntry(
-                content=retrieved_signatures or "No documentation found",
+                content=message,
                 title="Function Documentation Retriever",
                 tool_name="retrieve_function_documentation",
                 args={"function_names": function_names},
@@ -198,47 +198,20 @@ class GrepSearchInput(BaseModel):
     """Input for grep search tool."""
 
     query: str = Field(
-        description=(
-            "The search pattern. With isRegexp=false (default), searches for the exact phrase. "
-            "With isRegexp=true, supports regex patterns (e.g. 'CartesianMesh|setup_well' for OR). "
-            "For multiple unrelated terms, prefer separate searches."
-        )
-    )
-    includePattern: Optional[str] = Field(
-        default=None,
-        description=(
-            "Optional file pattern to restrict search (e.g. '*.jl' or '*.md'). "
-            "If omitted, searches both '*.jl' and '*.md' (recommended for discovery). "
-            "Use '*.md' for conceptual/how-to documentation and '*.jl' for code/examples/API usage. "
-            "Note: Use simple patterns like '*.jl' or '*.md', not glob patterns like '**/*.jl' and '**/*.md' - "
-            "the search is already recursive."
-        ),
-    )
-    isRegexp: Optional[bool] = Field(
-        default=False,
-        description=(
-            "If false (default), query is treated as exact phrase/substring. "
-            "If true, query is a regex pattern supporting OR (|), wildcards, etc."
-        ),
+        description="The exact text to search for (case-insensitive)."
     )
 
 
 @tool(
     "grep_search",
     description=(
-        "Search for keywords in JutulDarcy documentation and examples. "
-        "Searches recursively through all files. Limited to first 20 matches. "
-        "Returns file paths and line numbers with matching content. "
-        "Use this to discover which files contain relevant code before reading them with the file-reader tool. "
-        "For broad discovery, leave includePattern unset; only set it when you want one file type."
+        "Search for exact text in JutulDarcy documentation and examples. "
+        "Searches all .jl files in examples/ and all .md files in docs/. "
+        "Returns file paths and matching lines."
     ),
     args_schema=GrepSearchInput,
 )
-def grep_search(
-    query: str,
-    includePattern: Optional[str] = None,
-    isRegexp: Optional[bool] = False,
-) -> str:
+def grep_search(query: str) -> str:
     try:
         package_root = get_package_root("JutulDarcy")
         search_paths = [
@@ -251,27 +224,14 @@ def grep_search(
                 "No searchable JutulDarcy examples/docs/faq paths were found."
             )
 
-        cmd_parts = ["grep", "-r", "-n", "-i"]
-
-        if isRegexp:
-            cmd_parts.append("-E")
-        else:
-            cmd_parts.append("-F")  # Fixed string search
-
-        if includePattern:
-            cmd_parts.extend(["--include", includePattern])
-        else:
-            cmd_parts.extend(
-                [
-                    "--include=*.jl",
-                    "--include=*.md",
-                ]
-            )
-
+        # Use fixed string search (-F)
+        cmd_parts = ["grep", "-r", "-n", "-i", "-F"]
+        cmd_parts.extend(["--include=*.jl", "--include=*.md"])
         cmd_parts.append(query)
         cmd_parts.extend(search_paths)
 
         result = subprocess.run(cmd_parts, capture_output=True, text=True, timeout=10)
+
         if result.stdout:
             lines = result.stdout.strip().split("\n")
             file_counts: dict[str, int] = {}
@@ -296,7 +256,8 @@ def grep_search(
             for line in lines[:20]:
                 parts = line.split(":", 2)
                 if len(parts) == 3:
-                    match_results.append(f"File: {parts[0]}, Line {parts[1]}: {parts[2]}")
+                    rel_path = parts[0].replace(str(package_root) + "/", "")
+                    match_results.append(f"File: {rel_path}, Line {parts[1]}: {parts[2].strip()}")
                 else:
                     match_results.append(line)
 
@@ -326,16 +287,17 @@ def grep_search(
                         content=log_output,
                         title=f"Grep search: {query}",
                         tool_name="grep_search",
-                        args={"query": query, "includePattern": includePattern},
+                        args={"query": query},
                     )
                 )
 
             # Return full details to agent
-            return f"Found {total_matches} matches:\n" + "\n\n".join(match_results)
+            return f"Found {total_matches} matches in {num_files} files:\n" + "\n".join(file_list) + "\n\n" + "\n\n".join(match_results)
         else:
-            no_match_msg = f"No matches found for: {query}"
+            msg = f"No matches found for: {query}"
+
             print_to_console(
-                text=no_match_msg,
+                text=msg,
                 title=f"Grep search: {query}",
                 border_style=colorscheme.message,
             )
@@ -343,13 +305,13 @@ def grep_search(
             if logger:
                 logger.log(
                     ToolEntry(
-                        content=no_match_msg,
+                        content=msg,
                         title=f"Grep search: {query}",
                         tool_name="grep_search",
-                        args={"query": query, "includePattern": includePattern},
+                        args={"query": query},
                     )
                 )
-            return no_match_msg
+            return msg
 
     except Exception as e:
         error_msg = f"Error during text search: {str(e)}"
@@ -365,7 +327,7 @@ def grep_search(
                     content=error_msg,
                     title=f"Grep search error: {query}",
                     tool_name="grep_search",
-                    args={"query": query, "includePattern": includePattern},
+                    args={"query": query},
                     error=str(e),
                 )
             )

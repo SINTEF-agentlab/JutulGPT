@@ -3,9 +3,11 @@ from __future__ import annotations
 import os
 import re
 
-from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig, ensure_config
+from langchain_core.tools import InjectedToolArg, tool
 from pydantic import BaseModel, Field
 from rich.panel import Panel
+from typing_extensions import Annotated
 
 from jutulgpt.cli import colorscheme, print_to_console
 from jutulgpt.configuration import DISPLAY_CONTENT_MAX_LENGTH, cli_mode
@@ -84,21 +86,19 @@ def read_from_file(
         total_lines = len(lines)
 
         content = "\n".join(result_lines)
-        # Truncate content before adding fences to ensure fence is never cut off
-        truncated_content = _truncate(content)
-        fence = _get_fence(truncated_content, min_backticks=3)
-        display_text = f"{fence}text\n{truncated_content}\n{fence}"
+
+        summary = f"Reading file {file_path} (lines {start}-{end - 1})"
         print_to_console(
-            text=display_text,
-            title=f"Read file: {file_path}",
+            text=summary,
+            title="Read file",
             border_style=colorscheme.message,
         )
         logger = get_session_logger()
         if logger:
             logger.log(
                 ToolEntry(
-                    content=display_text,
-                    title=f"Read file: {file_path}",
+                    content=summary,
+                    title="Read file",
                     tool_name="read_from_file",
                     args={"file_path": file_path, "lines": f"{start}-{end - 1}"},
                 )
@@ -129,9 +129,17 @@ class WriteToFileInput(BaseModel):
 def write_to_file(
     file_path: str,
     content: str,
+    config: Annotated[RunnableConfig, InjectedToolArg] = None,
 ) -> str:
+    from jutulgpt.configuration import BaseConfiguration
+
+    # Check if we should skip approval (for autonomous mode)
+    config = ensure_config(config)
+    configuration = BaseConfiguration.from_runnable_config(config)
+    skip_approval = configuration.skip_terminal_approval
+
     # Check if file already exists
-    if os.path.exists(file_path):
+    if os.path.exists(file_path) and not skip_approval:
         try:
             # Read existing content for preview
             with open(file_path, "r", encoding="utf-8") as f:

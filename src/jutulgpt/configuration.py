@@ -211,8 +211,11 @@ EMBEDDING_MODEL_NAME: str = _EMBEDDING_MODEL_BY_PROVIDER[ACTIVE_PROVIDER]
 
 RECURSION_LIMIT = get(_cfg, "context", "recursion_limit", default=200)
 
+# Autonomous agent settings
+SKIP_TERMINAL_APPROVAL = False  # Skip approval for terminal commands and file overwrites
+
 # Display settings - for console and log output (not context management)
-DISPLAY_CONTENT_MAX_LENGTH = get(_cfg, "display", "content_max_length", default=800)
+DISPLAY_CONTENT_MAX_LENGTH = get(_cfg, "display", "content_max_length", default=2000)
 
 # Context management settings
 # ┌─────────────────────────────────────────────────────────────────┐
@@ -325,7 +328,7 @@ class BaseConfiguration:
         Literal["bm25", "faiss", "chroma"],
         {"__template_metadata__": {"kind": "retriever"}},
     ] = field(
-        default_factory=lambda: get(_cfg, "retrieval", "provider", default="bm25"),
+        default_factory=lambda: get(_cfg, "retrieval", "provider", default="chroma"),
         metadata={
             "description": "The retrieval provider to use. 'bm25' uses keyword-based BM25 search (no embeddings needed). 'faiss' and 'chroma' use vector-store retrieval with embeddings."
         },
@@ -346,7 +349,7 @@ class BaseConfiguration:
             _cfg,
             "retrieval",
             "search_kwargs",
-            default={"k": 2, "fetch_k": 10, "lambda_mult": 0.5},
+            default={"k": 3, "fetch_k": 10, "lambda_mult": 0.5},
         ),
         metadata={
             "description": "Additional keyword arguments to pass to the search function of the retriever. See langgraph documentation for details about what kwargs works for the different search types. See https://python.langchain.com/api_reference/chroma/vectorstores/langchain_chroma.vectorstores.Chroma.html#langchain_chroma.vectorstores.Chroma.as_retriever"
@@ -391,6 +394,17 @@ class BaseConfiguration:
         default=prompts.AUTONOMOUS_AGENT_PROMPT,
         metadata={
             "description": "The default prompt used for the fully autonomous agent."
+        },
+    )
+
+    # Autonomous agent settings
+    skip_terminal_approval: bool = field(
+        default_factory=lambda: SKIP_TERMINAL_APPROVAL,
+        metadata={
+            "description": "Skip human approval for terminal commands and file overwrites. "
+            "Enables fully autonomous operation. WARNING: Agent can execute commands "
+            "and overwrite files without asking. Agent is guided via prompts to prefer "
+            "safe tools (run_julia_code, read_from_file, etc.) over terminal commands."
         },
     )
 

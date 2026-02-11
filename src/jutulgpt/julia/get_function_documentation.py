@@ -41,9 +41,13 @@ def get_function_documentation(code: str) -> tuple[list[str], str]:
     """
 
     try:
-        res, err = run_julia_file(
+        res, err, returncode = run_julia_file(
             code=code, julia_file_name="julia_get_function_documentation.jl"
         )
+
+        if returncode != 0:
+            raise RuntimeError(f"Julia documentation script failed: {err}")
+
         func_names, documentation = _parse_julia_doc_output(res)
 
         if func_names:

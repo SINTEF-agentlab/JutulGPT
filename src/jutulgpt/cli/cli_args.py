@@ -1,3 +1,9 @@
+"""CLI argument parsing and application for JutulGPT.
+
+Handles parsing command-line arguments (model selection, autonomous mode settings, etc.)
+and applying them to the global configuration.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -10,6 +16,7 @@ from jutulgpt import configuration as cfg
 @dataclass(frozen=True)
 class CliArgs:
     model: str
+    skip_terminal_approval: bool
 
 
 def _normalize_model_name(name: str) -> str:
@@ -48,8 +55,17 @@ def parse_cli_args(argv: Optional[list[str]] = None) -> CliArgs:
             "qwen3:14b, qwen3:14b-thinking"
         ),
     )
+    parser.add_argument(
+        "--skip-terminal-approval",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip human approval for execute_terminal_command tool. "
+            "Enables fully autonomous operation."
+        ),
+    )
     ns = parser.parse_args(argv)
-    return CliArgs(model=ns.model)
+    return CliArgs(model=ns.model, skip_terminal_approval=ns.skip_terminal_approval)
 
 
 def apply_model_from_cli(model: str) -> None:
@@ -61,3 +77,14 @@ def apply_model_from_cli(model: str) -> None:
     cfg.ACTIVE_MODEL = f"{cfg.ACTIVE_PROVIDER}:{cfg.ACTIVE_MODEL_NAME}"
     cfg.MODEL_CONTEXT_WINDOW = cfg.ACTIVE_MODEL_CONFIG.context_window
     cfg.EMBEDDING_MODEL_NAME = cfg._EMBEDDING_MODEL_BY_PROVIDER[cfg.ACTIVE_PROVIDER]
+
+def apply_cli_args(args: CliArgs) -> None:
+    """Apply all CLI arguments to global configuration.
+
+    Args:
+        args: Parsed CLI arguments
+    """
+    apply_model_from_cli(args.model)
+
+    if args.skip_terminal_approval:
+        cfg.SKIP_TERMINAL_APPROVAL = True

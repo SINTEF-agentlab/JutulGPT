@@ -87,9 +87,9 @@ class AutonomousAgent(BaseAgent):
 
 autonomous_agent = AutonomousAgent(
     tools=[
-        execute_terminal_command,
         run_julia_code,
         run_julia_linter,
+        execute_terminal_command,
         get_working_directory,
         list_files_in_directory,
         read_from_file,
