@@ -4,9 +4,9 @@ JutulDarcy specs resolve paths lazily from the installed Julia package so they
 always stay in sync with the version the user has installed.
 """
 
+import hashlib
 from dataclasses import dataclass
 from functools import lru_cache, partial
-import hashlib
 from typing import Callable, Optional, Union
 
 from jutulgpt.rag import split_docs, split_examples
@@ -26,18 +26,22 @@ class RetrieverSpec:
 def _persist_path(name: str, provider: str, suffix: str) -> str:
     from jutulgpt.configuration import PROJECT_ROOT
 
-    return str(
+    path = (
         PROJECT_ROOT
         / "rag"
         / "retriever_store"
         / f"retriever_{name}_{provider}_{suffix}"
     )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return str(path)
 
 
 def _cache_path(name: str, suffix: str) -> str:
     from jutulgpt.configuration import PROJECT_ROOT
 
-    return str(PROJECT_ROOT / "rag" / "loaded_store" / f"loaded_{name}_{suffix}.pkl")
+    path = PROJECT_ROOT / "rag" / "loaded_store" / f"loaded_{name}_{suffix}.pkl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return str(path)
 
 
 def _suffix_from_path(path: str) -> str:
