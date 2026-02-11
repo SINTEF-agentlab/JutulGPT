@@ -176,12 +176,12 @@ def retrieve_function_documentation(
         func_names=function_names
     )
 
-    # Log the retrieval
     logger = get_session_logger()
     if logger:
+        message = "Retrieving documentation for functions: " + ", ".join(function_names)
         logger.log(
             ToolEntry(
-                content=retrieved_signatures or "No documentation found",
+                content=message,
                 title="Function Documentation Retriever",
                 tool_name="retrieve_function_documentation",
                 args={"function_names": function_names},
@@ -198,46 +198,20 @@ class GrepSearchInput(BaseModel):
     """Input for grep search tool."""
 
     query: str = Field(
-        description=(
-            "The search term. Simpler queries work best — a single identifier or keyword "
-            "will match more broadly than a long or specific phrase. "
-            "With isRegexp=true, use '|' to search for multiple terms at once."
-        )
-    )
-    includePattern: Optional[str] = Field(
-        default=None,
-        description=(
-            "Optional file pattern to restrict search (e.g. '*.jl' or '*.md'). "
-            "If omitted, searches both '*.jl' and '*.md'."
-        ),
-    )
-    isRegexp: Optional[bool] = Field(
-        default=False,
-        description=(
-            "If false (default), query is matched as an exact literal substring. "
-            "If true, query is a POSIX extended regex (use '|' for OR, '.*' for wildcards)."
-        ),
+        description="The exact text to search for (case-insensitive)."
     )
 
 
 @tool(
     "grep_search",
     description=(
-        "Search for a keyword or identifier in JutulDarcy documentation and examples. "
-        "Returns file paths and matching lines. "
-        "Tips: "
-        "1) Simpler queries match more broadly — prefer short identifiers over long phrases. "
-        "2) If no results, try a shorter or more general term rather than guessing variations. "
-        "3) To search for multiple terms at once, set isRegexp=true and join them with '|'. "
-        "4) One concept per search — search for an identifier, then read the matching file for context."
+        "Search for exact text in JutulDarcy documentation and examples. "
+        "Searches all .jl files in examples/ and all .md files in docs/. "
+        "Returns file paths and matching lines."
     ),
     args_schema=GrepSearchInput,
 )
-def grep_search(
-    query: str,
-    includePattern: Optional[str] = None,
-    isRegexp: Optional[bool] = False,
-) -> str:
+def grep_search(query: str) -> str:
     try:
         package_root = get_package_root("JutulDarcy")
         search_paths = [
@@ -250,18 +224,9 @@ def grep_search(
                 "No searchable JutulDarcy examples/docs/faq paths were found."
             )
 
-        cmd_parts = ["grep", "-r", "-n", "-i"]
-
-        if isRegexp:
-            cmd_parts.append("-E")
-        else:
-            cmd_parts.append("-F")  # Fixed string search
-
-        if includePattern:
-            cmd_parts.extend(["--include", includePattern])
-        else:
-            cmd_parts.extend(["--include=*.jl", "--include=*.md"])
-
+        # Use fixed string search (-F)
+        cmd_parts = ["grep", "-r", "-n", "-i", "-F"]
+        cmd_parts.extend(["--include=*.jl", "--include=*.md"])
         cmd_parts.append(query)
         cmd_parts.extend(search_paths)
 
@@ -322,25 +287,17 @@ def grep_search(
                         content=log_output,
                         title=f"Grep search: {query}",
                         tool_name="grep_search",
-                        args={"query": query, "includePattern": includePattern},
+                        args={"query": query},
                     )
                 )
 
             # Return full details to agent
             return f"Found {total_matches} matches in {num_files} files:\n" + "\n".join(file_list) + "\n\n" + "\n\n".join(match_results)
         else:
-            # Simple message for console/log
-            simple_msg = f"No matches found for: {query}"
-
-            # Agent gets additional tip
-            agent_msg = (
-                f"No matches found for: {query}\n"
-                f"Tip: try a shorter or more general term. Use isRegexp=true with '|' to "
-                f"search for multiple alternatives at once."
-            )
+            msg = f"No matches found for: {query}"
 
             print_to_console(
-                text=simple_msg,
+                text=msg,
                 title=f"Grep search: {query}",
                 border_style=colorscheme.message,
             )
@@ -348,13 +305,13 @@ def grep_search(
             if logger:
                 logger.log(
                     ToolEntry(
-                        content=simple_msg,
+                        content=msg,
                         title=f"Grep search: {query}",
                         tool_name="grep_search",
-                        args={"query": query, "includePattern": includePattern},
+                        args={"query": query},
                     )
                 )
-            return agent_msg
+            return msg
 
     except Exception as e:
         error_msg = f"Error during text search: {str(e)}"
@@ -370,7 +327,7 @@ def grep_search(
                     content=error_msg,
                     title=f"Grep search error: {query}",
                     tool_name="grep_search",
-                    args={"query": query, "includePattern": includePattern},
+                    args={"query": query},
                     error=str(e),
                 )
             )

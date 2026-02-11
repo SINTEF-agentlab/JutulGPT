@@ -86,21 +86,19 @@ def read_from_file(
         total_lines = len(lines)
 
         content = "\n".join(result_lines)
-        # Truncate content before adding fences to ensure fence is never cut off
-        truncated_content = _truncate(content)
-        fence = _get_fence(truncated_content, min_backticks=3)
-        display_text = f"{fence}text\n{truncated_content}\n{fence}"
+
+        summary = f"Reading file {file_path} (lines {start}-{end - 1})"
         print_to_console(
-            text=display_text,
-            title=f"Read file: {file_path}",
+            text=summary,
+            title="Read file",
             border_style=colorscheme.message,
         )
         logger = get_session_logger()
         if logger:
             logger.log(
                 ToolEntry(
-                    content=display_text,
-                    title=f"Read file: {file_path}",
+                    content=summary,
+                    title="Read file",
                     tool_name="read_from_file",
                     args={"file_path": file_path, "lines": f"{start}-{end - 1}"},
                 )
