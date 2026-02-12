@@ -84,7 +84,7 @@ def _run_julia_code(code: str, print_code: bool = True) -> tuple[str, bool]:
     logger = get_session_logger()
 
     if print_code:
-        display_code = _truncate(f"```julia\n{code}\n```")
+        display_code = f"```julia\n{code}\n```"
         print_to_console(
             text="Running code:\n" + display_code,
             title="Code Runner",
@@ -95,6 +95,18 @@ def _run_julia_code(code: str, print_code: bool = True) -> tuple[str, bool]:
             text="Running code...",
             title="Code Runner",
             border_style=colorscheme.warning,
+        )
+
+    # Log full code before execution
+    if logger:
+        logger.log(
+            CodeRunnerEntry(
+                content="",
+                title="Code Runner",
+                code=code,
+                language="julia",
+                success=None,
+            )
         )
 
     # result = run_string(code)
@@ -123,7 +135,7 @@ def _run_julia_code(code: str, print_code: bool = True) -> tuple[str, bool]:
                 CodeRunnerEntry(
                     content=f"Code failed!\n\n{display_error}{truncation_note}",
                     title="Code Runner",
-                    code=code,
+                    code=None,
                     language="julia",
                     success=False,
                 )
@@ -173,7 +185,7 @@ def _run_julia_code(code: str, print_code: bool = True) -> tuple[str, bool]:
             CodeRunnerEntry(
                 content=log_message,
                 title="Code Runner",
-                code=code,
+                code=None,
                 language="julia",
                 success=True,
             )
