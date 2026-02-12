@@ -30,7 +30,6 @@ dependencies = [
     "rank-bm25>=0.2.2",
     "rich>=14.1.0",
     "ruff>=0.12.4",
-    "transformers>=4.53.3",
     "unstructured[md]>=0.18.2",
 ]
 
