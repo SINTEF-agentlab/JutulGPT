@@ -86,6 +86,8 @@ class BaseAgent(ABC):
         self._messages_to_remove: List[
             RemoveMessage
         ] = []  # Messages to delete from state
+        self._pending_initial_prompt: Optional[str] = None
+        self._prompt_source: Optional[str] = None  # Track source for display
 
         # Process tools
         if isinstance(tools, ToolNode):
@@ -131,10 +133,10 @@ class BaseAgent(ABC):
                 pass
             return msg
 
-    def _apply_cli_args(self) -> bool:
-        """Apply CLI arguments (model, skip_terminal_approval, etc.) for CLI runs.
+    def _apply_cli_args(self) -> Optional[Any]:
+        """Apply CLI arguments and return parsed args (or None if --help was shown).
 
-        Returns False if argparse handled `-h/--help` (i.e. should exit).
+        Returns: None if help shown, True if non-CLI mode, CliArgs otherwise.
         """
         if not cli_mode:
             return True
@@ -144,11 +146,10 @@ class BaseAgent(ABC):
         try:
             args = parse_cli_args()
         except SystemExit:
-            # argparse handled -h/--help
-            return False
+            return None
 
         apply_cli_args(args)
-        return True
+        return args
 
     @abstractmethod
     def get_prompt_from_config(self, config: RunnableConfig) -> str:
@@ -627,10 +628,22 @@ class BaseAgent(ABC):
                 console_threshold=configuration.context_display_threshold,
             )
 
-        user_input = ""
-        while not user_input:  # Handle empty input
-            console.print("[bold blue]User Input:[/bold blue] ")
-            user_input = console.input("> ")
+        # Get user input from pending prompt (CLI args) or interactively
+        if self._pending_initial_prompt and len(state.messages) == 0:
+            user_input = self._pending_initial_prompt
+            source = self._prompt_source or "CLI"
+            self._pending_initial_prompt = None
+            self._prompt_source = None
+            console.print(f"[bold blue]User Input:[/bold blue] [dim](from {source})[/dim]")
+        else:
+            user_input = ""
+            while not user_input:
+                console.print("[bold blue]User Input:[/bold blue] ")
+                try:
+                    user_input = console.input("> ")
+                except EOFError:
+                    console.print("\n[bold red]Goodbye![/bold red]")
+                    exit(0)
 
         # Check for quit command
         if user_input.strip().lower() in ["q", "quit"]:
@@ -676,8 +689,25 @@ Here is the question asked by the other agent:
             raise ValueError("Cannot run standalone mode when part_of_multi_agent=True")
 
         try:
-            if not self._apply_cli_args():
+            cli_result = self._apply_cli_args()
+            if cli_result is None:
                 return
+
+            # Load initial prompt from CLI args if provided
+            if cli_mode and hasattr(cli_result, "prompt_file"):
+                if cli_result.prompt_file:
+                    try:
+                        with open(cli_result.prompt_file, "r", encoding="utf-8") as f:
+                            self._pending_initial_prompt = f.read().strip() or None
+                            if self._pending_initial_prompt:
+                                self._prompt_source = f"file: {cli_result.prompt_file}"
+                    except OSError as e:
+                        console.print(f"[bold red]Error reading --prompt-file: {e}[/bold red]")
+                        return
+                if cli_result.prompt:
+                    self._pending_initial_prompt = cli_result.prompt.strip() or self._pending_initial_prompt
+                    if self._pending_initial_prompt:
+                        self._prompt_source = "--prompt argument"
 
             show_startup_screen()
 

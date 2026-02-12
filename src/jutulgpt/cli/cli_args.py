@@ -17,6 +17,8 @@ from jutulgpt import configuration as cfg
 class CliArgs:
     model: str
     skip_terminal_approval: bool
+    prompt: Optional[str] = None
+    prompt_file: Optional[str] = None
 
 
 def _normalize_model_name(name: str) -> str:
@@ -64,8 +66,25 @@ def parse_cli_args(argv: Optional[list[str]] = None) -> CliArgs:
             "Enables fully autonomous operation."
         ),
     )
+    parser.add_argument(
+        "--prompt",
+        default=None,
+        metavar="TEXT",
+        help="Initial user prompt text",
+    )
+    parser.add_argument(
+        "--prompt-file",
+        default=None,
+        metavar="PATH",
+        help="Read initial prompt from file PATH",
+    )
     ns = parser.parse_args(argv)
-    return CliArgs(model=ns.model, skip_terminal_approval=ns.skip_terminal_approval)
+    return CliArgs(
+        model=ns.model,
+        skip_terminal_approval=ns.skip_terminal_approval,
+        prompt=ns.prompt,
+        prompt_file=ns.prompt_file,
+    )
 
 
 def apply_model_from_cli(model: str) -> None:
